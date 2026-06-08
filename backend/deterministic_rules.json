@@ -1,0 +1,10 @@
+{
+  "replacements": {
+    "गोपालराम": "Gopalram Ji Dhaba",
+    "जगबीर": "Jagveer Ji Dhaba",
+    "पेटीएम sbi": "Paytm Bank Drop to SBI"
+  },
+  "regex_patterns": {
+    "व्हील\\s*न?\\s*(\\d+)": "Wheel No: \\1"
+  }
+}

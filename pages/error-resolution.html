@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Error Resolution · PumpAI</title>
+<meta name="description" content="High-speed exception resolution dashboard for failed OCR, math, and preprocessing jobs in PumpAI.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+  /* ---- Kill all transitions for terminal-speed feel ---- */
+  * { transition: none !important; animation-duration: 0s !important; }
+
+  /* ---- ERV shell: sidebar already rendered by UI.renderShell ---- */
+  .erv-outer {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Top page header strip — slim, non-scrolling */
+  .erv-header {
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-sunken);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  .erv-header-left { display: flex; flex-direction: column; gap: 2px; }
+  .erv-header-crumb { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .erv-header-title { font-family: var(--font-display); font-size: 19px; font-weight: 600; color: var(--ink); }
+  .erv-header-right { display: flex; align-items: center; gap: 10px; }
+
+  /* ---- Main work area: list + workspace ---- */
+  .erv-body {
+    display: grid;
+    grid-template-columns: 256px 1fr;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ---- LEFT: Scrollable error list ---- */
+  .erv-list-panel {
+    border-right: 1px solid var(--border);
+    background: var(--bg-sunken);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .erv-list-header {
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .erv-list-count {
+    font-family: var(--font-mono);
+    background: var(--bad-bg);
+    color: var(--bad);
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .erv-list-count.zero {
+    background: var(--ok-bg);
+    color: var(--ok);
+  }
+  .erv-list-scroll {
+    overflow-y: auto;
+    flex: 1;
+  }
+  .erv-list-item {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer;
+    position: relative;
+    border-left: 3px solid transparent;
+  }
+  .erv-list-item:hover {
+    background: var(--bg-soft);
+  }
+  .erv-list-item.active {
+    background: var(--bg-elev);
+    border-left-color: var(--accent);
+  }
+  .erv-list-item .item-fname {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink);
+    font-weight: 600;
+    word-break: break-all;
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+  .erv-list-item .item-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+    margin-bottom: 4px;
+  }
+  .item-badge.FAILED_MATH        { background: var(--bad-bg);  color: var(--bad);  }
+  .item-badge.FAILED_PREPROCESSING { background: var(--warn-bg); color: var(--warn); }
+  .item-badge.FAILED_OCR          { background: var(--bad-bg);  color: var(--bad);  }
+  .item-badge.BLURRY              { background: var(--info-bg); color: var(--info); }
+  .erv-list-item .item-error-snippet {
+    font-size: 11px;
+    color: var(--ink-muted);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ---- RIGHT: Workspace (ribbon + split) ---- */
+  .erv-workspace {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Diagnostic ribbon */
+  .erv-ribbon {
+    padding: 0 20px;
+    border-bottom: 2px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    display: none;
+    align-items: flex-start;
+    gap: 10px;
+    line-height: 1.45;
+    flex-shrink: 0;
+    min-height: 42px;
+    max-height: 84px;
+    overflow-y: auto;
+  }
+  .erv-ribbon.visible { display: flex; align-items: center; }
+  .erv-ribbon.bad  { background: var(--bad-bg);  border-color: var(--bad);  color: var(--bad); }
+  .erv-ribbon.warn { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
+  .erv-ribbon.info { background: var(--info-bg); border-color: var(--info); color: var(--info); }
+  .erv-ribbon-icon { font-size: 16px; flex-shrink: 0; }
+  .erv-ribbon-tag  {
+    font-family: var(--font-mono);
+    background: rgba(0,0,0,0.18);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    flex-shrink: 0;
+    align-self: center;
+    margin-right: 2px;
+  }
+
+  /* Hotkey hint bar */
+  .erv-hotkey-bar {
+    padding: 5px 20px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-elev);
+    font-size: 11px;
+    color: var(--ink-muted);
+    display: flex;
+    gap: 18px;
+    flex-shrink: 0;
+  }
+  .erv-hotkey-bar kbd {
+    font-family: var(--font-mono);
+    background: var(--bg-soft);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 11px;
+    color: var(--ink);
+    margin-right: 4px;
+  }
+
+  /* 50/50 split: image left, form right */
+  .erv-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex: 1;
+    overflow: hidden;
+    gap: 0;
+  }
+
+  /* Image panel */
+  .erv-img-panel {
+    background: #0a0c12;
+    border-right: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .erv-img {
+    max-width: 100%;
+    max-height: 100%;
+    transform-origin: center;
+    cursor: grab;
+    user-select: none;
+    display: block;
+  }
+  .erv-img:active { cursor: grabbing; }
+  .erv-img-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--ink-faint);
+    font-size: 13px;
+    padding: 24px;
+    text-align: center;
+  }
+  .erv-img-placeholder .placeholder-icon { font-size: 40px; opacity: 0.3; }
+
+  /* Zoom / rotate control strip */
+  .erv-img-controls {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20, 20, 30, 0.88);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 6px;
+    display: flex;
+    gap: 2px;
+    z-index: 10;
+  }
+  .erv-img-controls button {
+    background: transparent;
+    color: var(--ink-soft);
+    border: none;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .erv-img-controls button:hover { background: rgba(255,255,255,0.12); color: var(--ink); }
+
+  /* No-image label overlay */
+  .erv-img-unavail-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--warn-bg);
+    color: var(--warn);
+    border: 1px solid var(--warn);
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  /* Override form panel */
+  .erv-form-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-elev);
+  }
+  .erv-form-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-sunken);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .erv-form-header h3 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .erv-form-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+  }
+  .erv-form-footer {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg-sunken);
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Form grid — identical to review-queue */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .form-section-title {
+    grid-column: span 2;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-top: 12px;
+    margin-bottom: 2px;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: 3px;
+  }
+  .form-field { display: flex; flex-direction: column; gap: 3px; }
+  .form-field.span-2 { grid-column: span 2; }
+  .form-field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .form-input {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 7px 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .form-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-elev);
+  }
+  .form-input.mismatch { border-color: var(--bad) !important; border-width: 2px !important; }
+  .mismatch-hint {
+    font-size: 10.5px;
+    color: var(--bad);
+    font-weight: 600;
+    margin-top: 1px;
+  }
+
+  /* Credit sales mini table inside form */
+  .credit-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .credit-table th {
+    padding: 5px 4px;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    font-weight: 600;
+    text-align: left;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .credit-table td { padding: 4px; }
+  .credit-table input.form-input { padding: 5px 8px; font-size: 12px; }
+
+  /* Empty state (all resolved) */
+  .erv-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--ink-muted);
+    padding: 48px 24px;
+    text-align: center;
+  }
+  .erv-empty .big-icon { font-size: 56px; opacity: 0.7; }
+  .erv-empty h2 { font-family: var(--font-display); font-size: 20px; color: var(--ok); margin: 0; }
+  .erv-empty p  { font-size: 14px; color: var(--ink-soft); margin: 0; max-width: 380px; }
+
+  /* Loading state */
+  .erv-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    color: var(--ink-muted);
+  }
+  .erv-spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    /* We keep the spin animation — it's informational, not decorative */
+    animation: erv-spin 0.9s linear infinite !important;
+    animation-duration: 0.9s !important;
+  }
+  @keyframes erv-spin { to { transform: rotate(360deg); } }
+
+  /* No-select on image */
+  img { -webkit-user-drag: none; }
+</style>
+</head>
+<body>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/party-ac.js"></script>
+
+<script>
+/* ============================================================
+   ErrorResolutionView — PumpAI
+   High-speed triage terminal for FAILED_PREPROCESSING,
+   FAILED_MATH, FAILED_OCR, and BLURRY batch jobs.
+   ============================================================ */
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let errorJobs  = [];     // all failed jobs from API
+let activeIdx  = 0;      // which job is currently displayed
+let isSaving   = false;  // guard against double-submit
+
+// Image viewport state
+let imgZoom = 1.0, imgPanX = 0, imgPanY = 0, imgRot = 0;
+let imgDragging = false, imgDragStartX = 0, imgDragStartY = 0;
+
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+window.addEventListener('DOMContentLoaded', async () => {
+  UI.renderShell();
+  buildShell();
+  await fetchFailedJobs();
+});
+
+
+function buildShell() {
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="erv-outer" id="erv-outer">
+      <div class="erv-header">
+        <div class="erv-header-left">
+          <div class="erv-header-crumb">Pipeline Exceptions</div>
+          <div class="erv-header-title">🔧 Error Resolution</div>
+        </div>
+        <div class="erv-header-right">
+          <span id="erv-count-badge" class="erv-list-count">–</span>
+          <button class="btn btn-ghost btn-sm" onclick="fetchFailedJobs()" id="erv-refresh-btn">↻ Refresh</button>
+        </div>
+      </div>
+
+      <div class="erv-body">
+        <!-- Left: error list -->
+        <div class="erv-list-panel">
+          <div class="erv-list-header">
+            Failed Jobs
+            <span id="erv-list-count" class="erv-list-count">0</span>
+          </div>
+          <div class="erv-list-scroll" id="erv-list-scroll">
+            <div class="erv-loading">
+              <div class="erv-spinner"></div>
+              <span style="font-size:13px;">Loading…</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: workspace -->
+        <div class="erv-workspace" id="erv-workspace">
+          <div class="erv-loading">
+            <div class="erv-spinner"></div>
+            <span style="font-size:13px;">Fetching failed jobs…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+
+// ---------------------------------------------------------------------------
+// Data fetching
+// ---------------------------------------------------------------------------
+async function fetchFailedJobs() {
+  setRefreshState(true);
+  try {
+    const res = await fetch('http://localhost:8000/api/failed-jobs');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    errorJobs = data.jobs || [];
+    activeIdx = 0;
+    renderList();
+    if (errorJobs.length > 0) {
+      selectJob(0);
+    } else {
+      renderEmptyState();
+    }
+  } catch (err) {
+    console.error('Failed to fetch failed jobs:', err);
+    UI.toast('Could not load failed jobs: ' + err.message, 'bad');
+    document.getElementById('erv-list-scroll').innerHTML = `
+      <div style="padding:20px; text-align:center; color:var(--bad); font-size:13px;">
+        ⚠ Backend not reachable.<br><small style="color:var(--ink-muted);">${err.message}</small>
+      </div>`;
+    document.getElementById('erv-workspace').innerHTML = `
+      <div class="erv-loading" style="color:var(--bad);">
+        <span style="font-size:32px;">⚠</span>
+        <span>Backend connection failed</span>
+      </div>`;
+  } finally {
+    setRefreshState(false);
+  }
+}
+
+function setRefreshState(loading) {
+  const btn = document.getElementById('erv-refresh-btn');
+  if (btn) btn.disabled = loading;
+}
+
+
+// ---------------------------------------------------------------------------
+// List rendering
+// ---------------------------------------------------------------------------
+function renderList() {
+  const container = document.getElementById('erv-list-scroll');
+  const countBadge = document.getElementById('erv-list-count');
+  const headerBadge = document.getElementById('erv-count-badge');
+
+  const n = errorJobs.length;
+  const countText = String(n);
+  if (countBadge) {
+    countBadge.textContent = countText;
+    countBadge.className = 'erv-list-count' + (n === 0 ? ' zero' : '');
+  }
+  if (headerBadge) {
+    headerBadge.textContent = n === 0 ? '✓ All Clear' : `${n} Failed`;
+    headerBadge.className = 'erv-list-count' + (n === 0 ? ' zero' : '');
+  }
+
+  if (n === 0) {
+    container.innerHTML = `<div style="padding:28px 14px; text-align:center; color:var(--ok); font-size:13px;">✓ No failures found</div>`;
+    return;
+  }
+
+  container.innerHTML = errorJobs.map((job, idx) => {
+    const badge    = statusBadgeHtml(job.status);
+    const snippet  = escHtml(job.last_error || 'No error details recorded.');
+    const fname    = escHtml(shortName(job.file_name || job.image_hash));
+    return `
+      <div class="erv-list-item ${idx === activeIdx ? 'active' : ''}"
+           id="erv-item-${idx}"
+           onclick="selectJob(${idx})">
+        <div class="item-fname">${fname}</div>
+        ${badge}
+        <div class="item-error-snippet">${snippet}</div>
+      </div>`;
+  }).join('');
+}
+
+function statusBadgeHtml(status) {
+  const labels = {
+    FAILED_MATH:          '✕ Math Fail',
+    FAILED_PREPROCESSING: '⚡ Pre-proc Fail',
+    FAILED_OCR:           '✕ OCR Fail',
+    BLURRY:               '〰 Blurry Image',
+  };
+  const label = labels[status] || status;
+  return `<span class="item-badge ${escHtml(status)}">${label}</span>`;
+}
+
+function shortName(fname) {
+  if (!fname) return '(unknown)';
+  const base = fname.split('/').pop();
+  return base.length > 36 ? '…' + base.slice(-36) : base;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+
+// ---------------------------------------------------------------------------
+// Job selection → workspace render
+// ---------------------------------------------------------------------------
+function selectJob(idx) {
+  if (idx < 0 || idx >= errorJobs.length) return;
+  activeIdx = idx;
+
+  // Update active highlight in list
+  document.querySelectorAll('.erv-list-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+  // Scroll list item into view
+  const item = document.getElementById(`erv-item-${idx}`);
+  if (item) item.scrollIntoView({ block: 'nearest' });
+
+  renderWorkspace(errorJobs[idx]);
+}
+
+
+function renderWorkspace(job) {
+  const ws = document.getElementById('erv-workspace');
+  if (!ws) return;
+
+  // Reset viewport state
+  imgZoom = 1.0; imgPanX = 0; imgPanY = 0; imgRot = 0;
+
+  const lp = job.ledger_payload || {};
+  const nozzles = lp.nozzles || [];
+  const n = (i) => nozzles[i] || {};
+
+  const meterReplaced = lp.hasOwnProperty('meter_replaced') ? !!lp.meter_replaced : false;
+  const replacementOffset = lp.hasOwnProperty('replacement_offset_liters') ? parseFloat(lp.replacement_offset_liters || 0.0) : 0.0;
+
+  // Ribbon color
+  const ribbonClass = (job.status === 'BLURRY') ? 'warn' : (job.status === 'FAILED_PREPROCESSING') ? 'warn' : 'bad';
+  const ribbonIcon  = (job.status === 'BLURRY') ? '〰' : (job.status === 'FAILED_PREPROCESSING') ? '⚡' : '✕';
+  const errorText   = escHtml(job.last_error || 'No error trace recorded for this job.');
+
+  // Image src
+  const imgSrc = job.image_url || '';
+
+  // Date for the form
+  const dateVal = job.date_guess || lp.date || '';
+
+  ws.innerHTML = `
+    <!-- Diagnostic ribbon -->
+    <div class="erv-ribbon ${ribbonClass} visible" id="erv-ribbon">
+      <span class="erv-ribbon-icon">${ribbonIcon}</span>
+      <span class="erv-ribbon-tag">${escHtml(job.status)}</span>
+      <span>${errorText}</span>
+    </div>
+
+    <!-- Hotkey hint bar -->
+    <div class="erv-hotkey-bar">
+      <span><kbd>Numpad Enter</kbd> Commit override &amp; advance</span>
+      <span><kbd>Esc</kbd> Skip to next</span>
+      <span><kbd>Scroll</kbd> Zoom image</span>
+      <span><kbd>Drag</kbd> Pan image</span>
+    </div>
+
+    <!-- 50/50 image + form split -->
+    <div class="erv-split" id="erv-split">
+
+      <!-- Image panel -->
+      <div class="erv-img-panel" id="erv-img-panel">
+        ${imgSrc
+          ? `<img id="erv-img" class="erv-img" src="${escHtml(imgSrc)}" alt="Source register sheet" draggable="false">`
+          : `<div class="erv-img-placeholder">
+               <div class="placeholder-icon">🖼</div>
+               <div>Image file not found in upload directory.</div>
+               <small style="color:var(--ink-faint);">${escHtml(job.file_name || '')}</small>
+             </div>`
+        }
+        ${!imgSrc ? `<div class="erv-img-unavail-badge">IMG NOT FOUND</div>` : ''}
+        <div class="erv-img-controls" id="erv-img-controls">
+          <button onclick="imgChangeZoom(-0.25)" title="Zoom out">−</button>
+          <button onclick="imgResetView()" title="Reset">100%</button>
+          <button onclick="imgChangeZoom(0.25)" title="Zoom in">+</button>
+          <button onclick="imgRotate(-90)" title="Rotate left">↺</button>
+          <button onclick="imgRotate(90)" title="Rotate right">↻</button>
+        </div>
+      </div>
+
+      <!-- Override form panel -->
+      <div class="erv-form-panel">
+        <div class="erv-form-header">
+          <h3>Manual Override Form</h3>
+          <span class="badge warn" style="font-size:11px;">${escHtml(job.file_name ? shortName(job.file_name) : job.image_hash.slice(0,12) + '…')}</span>
+        </div>
+        <div class="erv-form-body">
+          <form id="erv-form" onsubmit="event.preventDefault(); commitOverride();">
+            <input type="hidden" id="erv-hash" value="${escHtml(job.image_hash)}">
+            <div class="form-grid">
+
+              <div class="form-section-title">1 · General</div>
+              <div class="form-field">
+                <label for="erv-date">Operations Date</label>
+                <input class="form-input" type="date" id="erv-date" data-key="date" value="${escHtml(dateVal)}" tabindex="1" required>
+              </div>
+              <div class="form-field">
+                <label for="erv-shift">Shift</label>
+                <input class="form-input" type="text" id="erv-shift" data-key="shift" value="Morning (06:00–14:00)" tabindex="2">
+              </div>
+              <div class="form-field" style="display: flex; align-items: center; gap: 8px; align-self: center; margin-top: 12px;">
+                <input type="checkbox" id="f-meter-replaced" tabindex="2" style="width: 18px; height: 18px; margin: 0; cursor: pointer; accent-color: var(--accent);" ${meterReplaced ? 'checked' : ''}>
+                <label for="f-meter-replaced" style="margin: 0; cursor: pointer; font-weight: 500; user-select: none;">Meter Replaced</label>
+              </div>
+              <div class="form-field">
+                <label for="f-replacement-offset">Replacement Offset (Liters)</label>
+                <input class="form-input" type="number" step="0.01" id="f-replacement-offset" tabindex="2" placeholder="e.g. 150.25" value="${replacementOffset || ''}">
+              </div>
+
+              <div class="form-section-title">2 · MS-1 (Petrol Nozzle 1)</div>
+              <div class="form-field">
+                <label for="erv-n1o">Opening</label>
+                <input class="form-input" type="number" step="0.01" id="erv-n1o" data-key="n1_open" value="${fv(n(0).opening)}" tabindex="3">
+              </div>
+              <div class="form-field">
+                <label for="erv-n1c">Closing</label>
+                <input class="form-input" type="number" step="0.01" id="erv-n1c" data-key="n1_close" value="${fv(n(0).closing)}" tabindex="4">
+              </div>
+              <div class="form-field span-2" id="erv-n1s-wrap">
+                <label for="erv-n1s">Liters Dispensed</label>
+                <input class="form-input" type="number" step="0.01" id="erv-n1s" data-key="n1_sales"
+                  value="${fv(n(0).net_sales_liters || n(0).sales_liters_calculated)}" tabindex="5">
+                <div class="mismatch-hint" id="erv-n1-hint" style="display:none;"></div>
+              </div>
+
+              <div class="form-section-title">3 · MS-2 (Petrol Nozzle 2)</div>
+              <div class="form-field">
+                <label for="erv-n2o">Opening</label>
+                <input class="form-input" type="number" step="0.01" id="erv-n2o" data-key="n2_open" value="${fv(n(1).opening)}" tabindex="6">
+              </div>
+              <div class="form-field">
+                <label for="erv-n2c">Closing</label>
+                <input class="form-input" type="number" step="0.01" id="erv-n2c" data-key="n2_close" value="${fv(n(1).closing)}" tabindex="7">
+              </div>
+              <div class="form-field span-2" id="erv-n2s-wrap">
+                <label for="erv-n2s">Liters Dispensed</label>
+                <input class="form-input" type="number" step="0.01" id="erv-n2s" data-key="n2_sales"
+                  value="${fv(n(1).net_sales_liters || n(1).sales_liters_calculated)}" tabindex="8">
+                <div class="mismatch-hint" id="erv-n2-hint" style="display:none;"></div>
+              </div>
+
+              <div class="form-section-title">4 · HSD-1 (Diesel Nozzle 1)</div>
+              <div class="form-field">
+                <label for="erv-n3o">Opening</label>
+                <input class="form-input" type="number" step="0.01" id="erv-n3o" data-key="n3_open" value="${fv(n(2).opening)}" tabindex="9">
+              </div>
+              <div class="form-field">
+                <label for="erv-n3c">Closing</label>
+                <input class="form-input" type="number" step="0.01" id="erv-n3c" data-key="n3_close" value="${fv(n(2).closing)}" tabindex="10">
+              </div>
+              <div class="form-field span-2" id="erv-n3s-wrap">
+                <label for="erv-n3s">Liters Dispensed</label>
+                <input class="form-input" type="number" step="0.01" id="erv-n3s" data-key="n3_sales"
+                  value="${fv(n(2).net_sales_liters || n(2).sales_liters_calculated)}" tabindex="11">
+                <div class="mismatch-hint" id="erv-n3-hint" style="display:none;"></div>
+              </div>
+
+              <div class="form-section-title">5 · Daily Tenders (INR)</div>
+              <div class="form-field">
+                <label for="erv-cash">Cash Collected</label>
+                <input class="form-input" type="number" step="0.01" id="erv-cash" data-key="cash"
+                  value="${fv(lp.cash_tender)}" tabindex="12">
+              </div>
+              <div class="form-field">
+                <label for="erv-upi">UPI</label>
+                <input class="form-input" type="number" step="0.01" id="erv-upi" data-key="upi"
+                  value="${fv(lp.upi_tender)}" tabindex="13">
+              </div>
+              <div class="form-field">
+                <label for="erv-paytm">Paytm</label>
+                <input class="form-input" type="number" step="0.01" id="erv-paytm" data-key="paytm"
+                  value="${fv(lp.paytm_transfers)}" tabindex="14">
+              </div>
+              <div class="form-field">
+                <label for="erv-card">Card Terminal</label>
+                <input class="form-input" type="number" step="0.01" id="erv-card" data-key="card"
+                  value="${fv(lp.card_tender)}" tabindex="15">
+              </div>
+
+              <div class="form-section-title">6 · Udhaar &amp; Expenses</div>
+              <div class="form-field span-2">
+                <label>Udhaar (Credit Ledger)</label>
+                <table class="credit-table">
+                  <thead>
+                    <tr>
+                      <th style="width:44%;">Party Name</th>
+                      <th style="width:30%;">Vehicle No</th>
+                      <th style="width:26%;">Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="erv-credit-tbody"></tbody>
+                </table>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                  <button type="button" class="btn btn-ghost btn-sm" onclick="addCreditRow()">+ Add Row</button>
+                  <span style="font-size:13px; font-weight:600; color:var(--ink);">
+                    Total: <span id="erv-credit-total">0.00</span>
+                  </span>
+                </div>
+                <input type="hidden" id="erv-udhaar" data-key="udhaar">
+              </div>
+
+              <div class="form-field span-2">
+                <label for="erv-expenses">Cash Expenses (INR)</label>
+                <input class="form-input" type="number" step="0.01" id="erv-expenses" data-key="expenses"
+                  value="${fv(lp.expenses_amount)}" tabindex="16">
+              </div>
+
+            </div><!-- /form-grid -->
+          </form>
+        </div><!-- /erv-form-body -->
+
+        <div class="erv-form-footer">
+          <button class="btn btn-accent" style="flex:3;" onclick="commitOverride()" id="erv-commit-btn" tabindex="17">
+            ✓ Commit Override <small style="opacity:0.8;">(Numpad Enter)</small>
+          </button>
+          <button class="btn btn-ghost" style="flex:1;" onclick="skipJob()" tabindex="18">
+            Skip (Esc)
+          </button>
+        </div>
+      </div><!-- /erv-form-panel -->
+
+    </div><!-- /erv-split -->
+  `;
+
+  // Populate credit rows from ledger payload
+  const creditRows = lp.credit_sales || [];
+  renderCreditTable(creditRows);
+
+  // Wire live nozzle validation
+  wireLiveMathCheck();
+
+  // Wire image viewport drag / scroll
+  wireImgViewport();
+
+  // Wire keyboard shortcuts
+  wireHotkeys();
+
+  // Wire form field Enter → commit (except Numpad — wired globally)
+  // Standard Enter inside inputs does nothing (prevents accidental submits mid-typing)
+}
+
+// ---------------------------------------------------------------------------
+// Empty state
+// ---------------------------------------------------------------------------
+function renderEmptyState() {
+  const ws = document.getElementById('erv-workspace');
+  if (!ws) return;
+  ws.innerHTML = `
+    <div class="erv-empty">
+      <div class="big-icon">✓</div>
+      <h2>All Exceptions Resolved!</h2>
+      <p>No documents are currently tagged as failed, blurry, or un-processable. The pipeline is clean.</p>
+      <button class="btn btn-ghost btn-sm" onclick="fetchFailedJobs()" style="margin-top:8px;">↻ Refresh</button>
+    </div>`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Credit rows
+// ---------------------------------------------------------------------------
+function renderCreditTable(rows) {
+  const tbody = document.getElementById('erv-credit-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const list = rows.length ? rows : [{ party_name: '', vehicle_no: '', amount: 0 }];
+  list.forEach((r, i) => addCreditRowData(i, r.party_name || '', r.vehicle_no || '', r.amount || 0));
+  syncCreditTotal();
+  // Attach party-name autocomplete to all newly rendered party inputs
+  if (window.PartyAC) PartyAC.attachAll('#erv-credit-tbody .erv-c-party');
+}
+
+function addCreditRow() {
+  const tbody = document.getElementById('erv-credit-tbody');
+  if (!tbody) return;
+  addCreditRowData(tbody.children.length, '', '', 0);
+  syncCreditTotal();
+}
+
+function addCreditRowData(idx, party, vehicle, amount) {
+  const tbody = document.getElementById('erv-credit-tbody');
+  if (!tbody) return;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="form-input erv-c-party"   data-row="${idx}" value="${escHtml(party)}"   placeholder="Party"></td>
+    <td><input class="form-input erv-c-vehicle" data-row="${idx}" value="${escHtml(vehicle)}" placeholder="Vehicle"></td>
+    <td><input class="form-input erv-c-amount"  data-row="${idx}" type="number" step="0.01" value="${amount}" oninput="syncCreditTotal()"></td>`;
+  tbody.appendChild(tr);
+  // Attach autocomplete to this row's party input immediately
+  if (window.PartyAC) {
+    const partyInput = tr.querySelector('.erv-c-party');
+    if (partyInput) PartyAC.attach(partyInput);
+  }
+}
+
+function syncCreditTotal() {
+  const inputs = document.querySelectorAll('.erv-c-amount');
+  let total = 0;
+  inputs.forEach(el => total += parseFloat(el.value || 0));
+  const disp = document.getElementById('erv-credit-total');
+  if (disp) disp.textContent = total.toFixed(2);
+  const hidden = document.getElementById('erv-udhaar');
+  if (hidden) hidden.value = total.toFixed(2);
+}
+
+
+// ---------------------------------------------------------------------------
+// Live nozzle math check
+// ---------------------------------------------------------------------------
+const NOZZLE_CONFIGS = [
+  { oId: 'erv-n1o', cId: 'erv-n1c', sId: 'erv-n1s', hId: 'erv-n1-hint' },
+  { oId: 'erv-n2o', cId: 'erv-n2c', sId: 'erv-n2s', hId: 'erv-n2-hint' },
+  { oId: 'erv-n3o', cId: 'erv-n3c', sId: 'erv-n3s', hId: 'erv-n3-hint' },
+];
+
+function wireLiveMathCheck() {
+  NOZZLE_CONFIGS.forEach(cfg => {
+    [cfg.oId, cfg.cId, cfg.sId].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => validateNozzles());
+    });
+  });
+  const repEl = document.getElementById('f-meter-replaced');
+  if (repEl) repEl.addEventListener('change', () => validateNozzles());
+  const offEl = document.getElementById('f-replacement-offset');
+  if (offEl) offEl.addEventListener('input', () => validateNozzles());
+
+  validateNozzles();
+}
+
+function validateNozzles() {
+  const meterReplaced = document.getElementById("f-meter-replaced")?.checked || false;
+  const replacementOffset = parseFloat(document.getElementById("f-replacement-offset")?.value || 0.0);
+
+  NOZZLE_CONFIGS.forEach((cfg, idx) => {
+    const oEl = document.getElementById(cfg.oId);
+    const cEl = document.getElementById(cfg.cId);
+    const sEl = document.getElementById(cfg.sId);
+    const hEl = document.getElementById(cfg.hId);
+    if (!oEl || !cEl || !sEl) return;
+
+    const o = parseFloat(oEl.value || 0);
+    const c = parseFloat(cEl.value || 0);
+    const s = parseFloat(sEl.value || 0);
+
+    // Determine nozzle-specific replacement details matching the backend logic
+    const job = errorJobs[activeIdx];
+    const lp = (job && job.ledger_payload) ? job.ledger_payload : {};
+    const origNozzles = lp.nozzles || [];
+    const origNozzle = origNozzles[idx] || {};
+
+    let isReplaced = origNozzle.meter_replaced || false;
+    let offset = origNozzle.replacement_offset_liters || 0.0;
+
+    if (meterReplaced && (isReplaced || c < o || origNozzles.length === 1)) {
+      isReplaced = true;
+      if (offset === 0.0) {
+        offset = replacementOffset;
+      }
+    }
+
+    let calc;
+    if (isReplaced) {
+      calc = parseFloat(((c - o) + offset).toFixed(2));
+    } else if (c >= o) {
+      calc = parseFloat((c - o).toFixed(2));
+    } else {
+      calc = parseFloat(((999999 - o) + c).toFixed(2));
+    }
+
+    const diff = parseFloat((calc - s).toFixed(2));
+    const mismatch = o > 0 && c > 0 && Math.abs(diff) > 0.01;
+
+    sEl.classList.toggle('mismatch', mismatch);
+    if (hEl) {
+      if (mismatch) {
+        hEl.style.display = 'block';
+        hEl.textContent = `⚠ Expected ${calc.toFixed(2)} L — short by ${Math.abs(diff).toFixed(2)} L`;
+      } else {
+        hEl.style.display = 'none';
+        hEl.textContent = '';
+      }
+    }
+  });
+}
+
+
+// ---------------------------------------------------------------------------
+// Commit override
+// ---------------------------------------------------------------------------
+async function commitOverride() {
+  if (isSaving) return;
+  const job = errorJobs[activeIdx];
+  if (!job) return;
+
+  // Collect form values
+  const g = (id) => {
+    const el = document.getElementById(id);
+    return el ? el.value : '';
+  };
+  const n = (id) => parseFloat(g(id) || 0);
+
+  const date   = g('erv-date');
+  if (!date) { UI.toast('Date is required', 'bad'); return; }
+
+  const meterReplaced = document.getElementById("f-meter-replaced")?.checked || false;
+  const replacementOffset = Number(document.getElementById("f-replacement-offset")?.value || 0.0);
+
+  const buildNozzleObj = (name, fuelType, open, close, manualSales, rate, idx) => {
+    const origNozzles = (job && job.ledger_payload) ? (job.ledger_payload.nozzles || []) : [];
+    const origNozzle = origNozzles[idx] || {};
+
+    let isReplaced = origNozzle.meter_replaced || false;
+    let offset = origNozzle.replacement_offset_liters || 0.0;
+
+    if (meterReplaced && (isReplaced || close < open || origNozzles.length === 1)) {
+      isReplaced = true;
+      if (offset === 0.0) {
+        offset = replacementOffset;
+      }
+    }
+
+    let calcFlow;
+    if (isReplaced) {
+      calcFlow = (close - open) + offset;
+    } else if (close >= open) {
+      calcFlow = close - open;
+    } else {
+      calcFlow = (999999 - open) + close;
+    }
+
+    const sales = manualSales || calcFlow;
+    const amt = Number((sales * rate).toFixed(2));
+
+    return {
+      "nozzle_name": name,
+      "fuel_type": fuelType,
+      "opening": open,
+      "closing": close,
+      "sales_liters_calculated": sales,
+      "net_sales_liters": sales,
+      "rate": rate,
+      "amount_calculated": amt,
+      "is_valid": true,
+      "math_warning": null,
+      "meter_replaced": isReplaced,
+      "replacement_offset_liters": offset
+    };
+  };
+
+  const n1o = n('erv-n1o'), n1c = n('erv-n1c'), n1s_man = n('erv-n1s');
+  const n2o = n('erv-n2o'), n2c = n('erv-n2c'), n2s_man = n('erv-n2s');
+  const n3o = n('erv-n3o'), n3c = n('erv-n3c'), n3s_man = n('erv-n3s');
+
+  const msRate  = 106.31;
+  const hsdRate = 94.27;
+
+  const nozzle1 = buildNozzleObj('MS-1 (Petrol)',  'MS',  n1o, n1c, n1s_man, msRate,  0);
+  const nozzle2 = buildNozzleObj('MS-2 (Petrol)',  'MS',  n2o, n2c, n2s_man, msRate,  1);
+  const nozzle3 = buildNozzleObj('HSD-1 (Diesel)', 'HSD', n3o, n3c, n3s_man, hsdRate, 2);
+
+  const nozzles = [nozzle1, nozzle2, nozzle3];
+
+  const n1s = nozzle1.net_sales_liters;
+  const n2s = nozzle2.net_sales_liters;
+  const n3s = nozzle3.net_sales_liters;
+
+  // Collect credit sales from the table
+  const creditSales = [];
+  document.querySelectorAll('#erv-credit-tbody tr').forEach(tr => {
+    const party   = tr.querySelector('.erv-c-party')?.value.trim();
+    const vehicle = tr.querySelector('.erv-c-vehicle')?.value.trim();
+    const amount  = parseFloat(tr.querySelector('.erv-c-amount')?.value || 0);
+    if (party || amount > 0) creditSales.push({ party_name: party, vehicle_no: vehicle, amount });
+  });
+
+  const totalMs  = n1s + n2s;
+  const totalHsd = n3s;
+  const totalCredit = creditSales.reduce((s, c) => s + (c.amount || 0), 0);
+  const cashExpenses = n('erv-expenses') > 0 ? [{ party_name: 'Cash Expenses', amount: n('erv-expenses') }] : [];
+  const totalCash = n('erv-cash') + n('erv-upi') + n('erv-paytm') + n('erv-card');
+
+  const savePayload = {
+    date,
+    total_calculated_liters_hsd: totalHsd,
+    total_calculated_liters_ms:  totalMs,
+    total_cash_calculated:       totalCash,
+    total_credit_sales:          totalCredit,
+    total_testing_deductions:    0,
+    total_regular_hsd_liters:    totalHsd,
+    total_premium_hsd_liters:    0,
+    total_regular_ms_liters:     totalMs,
+    total_premium_ms_liters:     0,
+    validation_status:           'balanced',
+    mathematical_warnings:       [],
+    nozzles,
+    credit_sales:                creditSales,
+    cash_expenses:               cashExpenses,
+    dsm_shifts:                  [],
+    lube_sales:                  [],
+    card_settlements:            [],
+    credit_realizations:         [],
+    staff_advances:              [],
+    meter_replaced:              meterReplaced,
+    replacement_offset_liters:   replacementOffset,
+  };
+
+  // Disable commit button during save
+  isSaving = true;
+  const btn = document.getElementById('erv-commit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+
+  try {
+    const res = await fetch('http://localhost:8000/api/resolve-job', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_hash: job.image_hash, payload: savePayload }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+    // Remove resolved job from local list
+    errorJobs.splice(activeIdx, 1);
+    if (activeIdx >= errorJobs.length) activeIdx = Math.max(0, errorJobs.length - 1);
+
+    UI.toast(`✓ Override committed for ${date} — status → COMPLETED`, 'ok');
+
+    // Re-render list and auto-load next
+    renderList();
+    if (errorJobs.length > 0) {
+      selectJob(activeIdx);
+    } else {
+      renderEmptyState();
+    }
+
+  } catch (err) {
+    console.error('resolve-job failed:', err);
+    UI.toast('Save failed: ' + err.message, 'bad');
+  } finally {
+    isSaving = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = '✓ Commit Override <small style="opacity:0.8;">(Numpad Enter)</small>'; }
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Skip job
+// ---------------------------------------------------------------------------
+function skipJob() {
+  if (errorJobs.length <= 1) { UI.toast('Only one item — cannot skip.', 'warn'); return; }
+  // Rotate: push current to end
+  const current = errorJobs.splice(activeIdx, 1)[0];
+  errorJobs.push(current);
+  if (activeIdx >= errorJobs.length) activeIdx = 0;
+  renderList();
+  selectJob(activeIdx);
+  UI.toast('Skipped — pushed to end of queue.', '');
+}
+
+
+// ---------------------------------------------------------------------------
+// Keyboard hotkeys (global)
+// ---------------------------------------------------------------------------
+function wireHotkeys() {
+  // Remove any previous handler
+  if (window._ervKeyHandler) {
+    document.removeEventListener('keydown', window._ervKeyHandler);
+  }
+  window._ervKeyHandler = (e) => {
+    // Numpad Enter → commit
+    if (e.code === 'NumpadEnter') {
+      e.preventDefault();
+      commitOverride();
+      return;
+    }
+    // Esc → skip
+    if (e.key === 'Escape') {
+      const activeEl = document.activeElement;
+      if (activeEl && activeEl.tagName === 'INPUT') {
+        activeEl.blur();
+        return;
+      }
+      skipJob();
+      return;
+    }
+    // Arrow keys in list: navigate jobs
+    if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); selectJob(Math.min(activeIdx + 1, errorJobs.length - 1)); }
+    if (e.altKey && e.key === 'ArrowUp')   { e.preventDefault(); selectJob(Math.max(activeIdx - 1, 0)); }
+  };
+  document.addEventListener('keydown', window._ervKeyHandler);
+}
+
+
+// ---------------------------------------------------------------------------
+// Image viewport
+// ---------------------------------------------------------------------------
+function wireImgViewport() {
+  const panel = document.getElementById('erv-img-panel');
+  const img   = document.getElementById('erv-img');
+  if (!panel || !img) return;
+
+  panel.addEventListener('mousedown', (e) => {
+    imgDragging   = true;
+    imgDragStartX = e.clientX - imgPanX;
+    imgDragStartY = e.clientY - imgPanY;
+    img.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!imgDragging) return;
+    imgPanX = e.clientX - imgDragStartX;
+    imgPanY = e.clientY - imgDragStartY;
+    applyImgTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    imgDragging = false;
+    if (img) img.style.cursor = 'grab';
+  });
+
+  panel.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    imgZoom = Math.max(0.25, Math.min(8.0, imgZoom + (e.deltaY < 0 ? 0.1 : -0.1)));
+    applyImgTransform();
+  }, { passive: false });
+}
+
+function applyImgTransform() {
+  const img = document.getElementById('erv-img');
+  if (img) img.style.transform = `translate(${imgPanX}px, ${imgPanY}px) scale(${imgZoom}) rotate(${imgRot}deg)`;
+}
+
+function imgChangeZoom(delta) {
+  imgZoom = Math.max(0.25, Math.min(8.0, imgZoom + delta));
+  applyImgTransform();
+}
+
+function imgResetView() {
+  imgZoom = 1.0; imgPanX = 0; imgPanY = 0; imgRot = 0;
+  applyImgTransform();
+}
+
+function imgRotate(deg) {
+  imgRot += deg;
+  applyImgTransform();
+}
+
+
+// ---------------------------------------------------------------------------
+// Tiny helpers
+// ---------------------------------------------------------------------------
+function fv(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  const n = parseFloat(v);
+  return isNaN(n) ? 0 : n;
+}
+</script>
+</body>
+</html>

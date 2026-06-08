@@ -1,0 +1,88 @@
+('/Users/shreyansh/Claude pump ai '
+ 'files/backend/build/PumpAI_Backend/PumpAI_Backend',
+ False,
+ False,
+ True,
+ None,
+ None,
+ False,
+ False,
+ None,
+ True,
+ False,
+ 'arm64',
+ None,
+ None,
+ '/Users/shreyansh/Claude pump ai '
+ 'files/backend/build/PumpAI_Backend/PumpAI_Backend.pkg',
+ [('pyi-contents-directory _internal', '', 'OPTION'),
+  ('PYZ-00.pyz',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/build/PumpAI_Backend/PYZ-00.pyz',
+   'PYZ'),
+  ('python3.9/lib-dynload/_struct.cpython-39-darwin.so',
+   '/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/lib-dynload/_struct.cpython-39-darwin.so',
+   'EXTENSION'),
+  ('python3.9/lib-dynload/zlib.cpython-39-darwin.so',
+   '/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/lib-dynload/zlib.cpython-39-darwin.so',
+   'EXTENSION'),
+  ('struct',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/build/PumpAI_Backend/localpycs/struct.pyc',
+   'PYMODULE'),
+  ('pyimod01_archive',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/build/PumpAI_Backend/localpycs/pyimod01_archive.pyc',
+   'PYMODULE'),
+  ('pyimod02_importers',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/build/PumpAI_Backend/localpycs/pyimod02_importers.pyc',
+   'PYMODULE'),
+  ('pyimod03_ctypes',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/build/PumpAI_Backend/localpycs/pyimod03_ctypes.pyc',
+   'PYMODULE'),
+  ('pyiboot01_bootstrap',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/venv/lib/python3.9/site-packages/PyInstaller/loader/pyiboot01_bootstrap.py',
+   'PYSOURCE'),
+  ('pyi_rth_multiprocessing',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/venv/lib/python3.9/site-packages/PyInstaller/hooks/rthooks/pyi_rth_multiprocessing.py',
+   'PYSOURCE'),
+  ('pyi_rth_pkgutil',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/venv/lib/python3.9/site-packages/PyInstaller/hooks/rthooks/pyi_rth_pkgutil.py',
+   'PYSOURCE'),
+  ('pyi_rth_inspect',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/venv/lib/python3.9/site-packages/PyInstaller/hooks/rthooks/pyi_rth_inspect.py',
+   'PYSOURCE'),
+  ('pyi_rth_pkgres',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/venv/lib/python3.9/site-packages/PyInstaller/hooks/rthooks/pyi_rth_pkgres.py',
+   'PYSOURCE'),
+  ('pyi_rth_cryptography_openssl',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/venv/lib/python3.9/site-packages/_pyinstaller_hooks_contrib/rthooks/pyi_rth_cryptography_openssl.py',
+   'PYSOURCE'),
+  ('pyi_rth_setuptools',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/venv/lib/python3.9/site-packages/PyInstaller/hooks/rthooks/pyi_rth_setuptools.py',
+   'PYSOURCE'),
+  ('pyi_rth_mplconfig',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/venv/lib/python3.9/site-packages/PyInstaller/hooks/rthooks/pyi_rth_mplconfig.py',
+   'PYSOURCE'),
+  ('main',
+   '/Users/shreyansh/Claude pump ai files/backend/main.py',
+   'PYSOURCE')],
+ [],
+ False,
+ False,
+ 1780809387,
+ [('runw',
+   '/Users/shreyansh/Claude pump ai '
+   'files/backend/venv/lib/python3.9/site-packages/PyInstaller/bootloader/Darwin-64bit/runw',
+   'EXECUTABLE')],
+ '/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/Python3')

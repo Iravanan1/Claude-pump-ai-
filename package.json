@@ -1,0 +1,19 @@
+{
+  "name": "claude-pump-ai-files",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "parcel index.html",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Your Name",
+  "license": "ISC",
+  "dependencies": {
+    "package-name": "^1.0.0"
+  },
+  "devDependencies": {
+    "parcel": "^2.0.0"
+  }
+}

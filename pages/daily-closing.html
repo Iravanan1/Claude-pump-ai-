@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Closing · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+function render() {
+  const s = PumpStore.state;
+  const today = new URLSearchParams(location.search).get('date') || new Date().toISOString().slice(0, 10);
+
+  const shifts = s.shifts.filter(sh => (sh.openedAt || '').slice(0, 10) === today);
+  const totals = shifts.reduce((a, sh) => {
+    const t = Acct.shiftTotals(sh);
+    return {
+      litres: a.litres + t.sales.litres,
+      sales: a.sales + t.sales.amountRs,
+      cash: a.cash + t.tenders.cash,
+      upi: a.upi + t.tenders.upi,
+      card: a.card + t.tenders.card,
+      credit: a.credit + t.tenders.credit,
+      fleet: a.fleet + t.tenders.fleet,
+      expenses: a.expenses + t.expenses.totalRs,
+      variance: a.variance + t.varianceRs
+    };
+  }, { litres: 0, sales: 0, cash: 0, upi: 0, card: 0, credit: 0, fleet: 0, expenses: 0, variance: 0 });
+
+  // available dates for picker
+  const dates = [...new Set(s.shifts.map(sh => (sh.openedAt || '').slice(0, 10)))].sort().reverse();
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Operations',
+      title: 'Daily Closing Sheet',
+      desc: 'Consolidated view for the entire day — every shift, every tender, every variance.',
+      actions: `
+        <select class="select no-print" id="date-pick" style="width: 200px;">
+          ${dates.length === 0 ? `<option>${today}</option>` : dates.map(d => `<option value="${d}" ${d === today ? 'selected' : ''}>${new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</option>`).join('')}
+        </select>
+        <button class="btn" onclick="window.print()">Print</button>
+      `
+    })}
+
+    <div class="card">
+      <div class="row-between mb-2">
+        <div>
+          <div style="font-family: var(--font-display); font-size: 24px;">${s.meta.pumpName}</div>
+          <small class="muted">${s.meta.location} · GSTIN ${s.meta.gst}</small>
+        </div>
+        <div class="right">
+          <div style="font-family: var(--font-display); font-size: 20px;">${new Date(today).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
+          <small class="muted">${shifts.length} shift${shifts.length === 1 ? '' : 's'}</small>
+        </div>
+      </div>
+
+      ${shifts.length === 0 ? UI.emptyState({ title: 'No shifts for this date' }) : `
+        <div class="grid grid-4 mb-3" style="margin-bottom:18px;">
+          <div class="kpi"><div class="kpi-label">Total Sales</div><div class="kpi-value">${fmt.rs(totals.sales)}</div></div>
+          <div class="kpi"><div class="kpi-label">Litres Sold</div><div class="kpi-value">${fmt.num(totals.litres, 0)}<span class="unit">L</span></div></div>
+          <div class="kpi"><div class="kpi-label">Expenses</div><div class="kpi-value">${fmt.rs(totals.expenses)}</div></div>
+          <div class="kpi"><div class="kpi-label">Net Variance</div><div class="kpi-value" style="color:${Math.abs(totals.variance) < 100 ? 'var(--ok)' : totals.variance < 0 ? 'var(--bad)' : 'var(--warn)'}">${totals.variance >= 0 ? '+' : ''}${fmt.rs(totals.variance)}</div></div>
+        </div>
+
+        <h3 style="margin-bottom:10px;">Shift-by-shift</h3>
+        <div class="table-wrap mb-3" style="margin-bottom:18px;">
+          <table class="t">
+            <thead><tr>
+              <th>Shift</th><th>Operator</th>
+              <th class="num">Litres</th><th class="num">Sales</th>
+              <th class="num">Cash</th><th class="num">UPI</th><th class="num">Card</th>
+              <th class="num">Variance</th>
+            </tr></thead>
+            <tbody>
+              ${shifts.map(sh => {
+                const t = Acct.shiftTotals(sh);
+                return `<tr>
+                  <td>${sh.shiftName || '—'}</td>
+                  <td>${sh.operatorName}</td>
+                  <td class="num">${fmt.num(t.sales.litres, 2)}</td>
+                  <td class="num">${fmt.rs(t.sales.amountRs)}</td>
+                  <td class="num">${fmt.rs(t.tenders.cash)}</td>
+                  <td class="num">${fmt.rs(t.tenders.upi)}</td>
+                  <td class="num">${fmt.rs(t.tenders.card)}</td>
+                  <td class="num" style="color:${Math.abs(t.varianceRs) < 50 ? 'var(--ok)' : t.varianceRs < 0 ? 'var(--bad)' : 'var(--warn)'};">${t.varianceRs >= 0 ? '+' : ''}${fmt.rs(t.varianceRs)}</td>
+                </tr>`;
+              }).join('')}
+              <tr style="background: var(--bg-soft);">
+                <td colspan="2"><strong>Day total</strong></td>
+                <td class="num"><strong>${fmt.num(totals.litres, 2)}</strong></td>
+                <td class="num"><strong>${fmt.rs(totals.sales)}</strong></td>
+                <td class="num"><strong>${fmt.rs(totals.cash)}</strong></td>
+                <td class="num"><strong>${fmt.rs(totals.upi)}</strong></td>
+                <td class="num"><strong>${fmt.rs(totals.card)}</strong></td>
+                <td class="num"><strong>${totals.variance >= 0 ? '+' : ''}${fmt.rs(totals.variance)}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid grid-2">
+          <div>
+            <h3 style="margin-bottom:10px;">Tender summary</h3>
+            <div class="table-wrap">
+              <table class="t">
+                <tbody>
+                  <tr><td>Cash</td><td class="num">${fmt.rs(totals.cash)}</td></tr>
+                  <tr><td>UPI / QR</td><td class="num">${fmt.rs(totals.upi)}</td></tr>
+                  <tr><td>Card</td><td class="num">${fmt.rs(totals.card)}</td></tr>
+                  <tr><td>Credit (udhaar)</td><td class="num">${fmt.rs(totals.credit)}</td></tr>
+                  <tr><td>Fleet card</td><td class="num">${fmt.rs(totals.fleet)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3 style="margin-bottom:10px;">Per-fuel litres</h3>
+            <div class="table-wrap">
+              <table class="t">
+                <tbody>
+                  ${fuelBreakdown(shifts)}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3" style="margin-top:30px; padding-top:18px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-muted);">
+          <div>Generated ${fmt.date(new Date().toISOString())} · PumpAI v1.0</div>
+          <div>__________________________<br>Manager signature</div>
+        </div>
+      `}
+    </div>
+  `;
+
+  const pick = document.getElementById('date-pick');
+  if (pick) pick.onchange = () => location.search = '?date=' + pick.value;
+}
+
+function fuelBreakdown(shifts) {
+  const map = {};
+  shifts.forEach(sh => {
+    const t = Acct.shiftTotals(sh);
+    t.rows.forEach(r => {
+      map[r.fuel] = map[r.fuel] || { litres: 0, rs: 0 };
+      map[r.fuel].litres += r.litres;
+      map[r.fuel].rs += r.amountRs;
+    });
+  });
+  return Object.entries(map).map(([fuel, v]) =>
+    `<tr><td>${fuel}</td><td class="num">${fmt.num(v.litres, 2)} L</td><td class="num">${fmt.rs(v.rs)}</td></tr>`
+  ).join('');
+}
+
+render();
+</script>
+</body>
+</html>

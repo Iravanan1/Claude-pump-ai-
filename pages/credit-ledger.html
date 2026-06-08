@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Credit Ledger · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+function render() {
+  const s = PumpStore.state;
+  const entries = s.credit || [];
+
+  // Aggregate by customer
+  const byCust = {};
+  entries.forEach(e => {
+    byCust[e.customer] = byCust[e.customer] || { customer: e.customer, owed: 0, paid: 0, lastAt: e.at };
+    if (e.type === 'sale') byCust[e.customer].owed += Number(e.amount);
+    else byCust[e.customer].paid += Number(e.amount);
+    if (e.at > byCust[e.customer].lastAt) byCust[e.customer].lastAt = e.at;
+  });
+  const customers = Object.values(byCust).map(c => ({ ...c, balance: c.owed - c.paid }))
+                          .sort((a, b) => b.balance - a.balance);
+  const totalOwed = customers.reduce((s, c) => s + c.balance, 0);
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Records',
+      title: 'Credit Ledger (Udhaar)',
+      desc: 'Track outstanding balances with regular customers — trucks, fleets, neighbours.'
+    })}
+
+    <div class="grid grid-3">
+      <div class="kpi"><div class="kpi-label">Total outstanding</div><div class="kpi-value" style="color: var(--bad);">${fmt.rs(totalOwed)}</div></div>
+      <div class="kpi"><div class="kpi-label">Active customers</div><div class="kpi-value">${customers.filter(c => c.balance > 0).length}</div></div>
+      <div class="kpi"><div class="kpi-label">This month entries</div><div class="kpi-value">${entries.filter(e => e.at.slice(0,7) === new Date().toISOString().slice(0,7)).length}</div></div>
+    </div>
+
+    <div class="grid grid-2 mt-3">
+      <div class="card">
+        <div class="card-title"><h3>Add entry</h3></div>
+        <form id="cr-form">
+          <div class="input-row">
+            <div class="field">
+              <label>Type</label>
+              <select class="select" name="type"><option value="sale">Sale (on credit)</option><option value="payment">Payment received</option></select>
+            </div>
+            <div class="field">
+              <label>Date</label>
+              <input class="input" type="date" name="date" required value="${new Date().toISOString().slice(0,10)}">
+            </div>
+          </div>
+          <div class="field">
+            <label>Customer name</label>
+            <input class="input" name="customer" required list="cust-list" placeholder="e.g., Sharma Transports">
+            <datalist id="cust-list">
+              ${customers.map(c => `<option value="${c.customer}">`).join('')}
+            </datalist>
+          </div>
+          <div class="input-row">
+            <div class="field">
+              <label>Amount (₹)</label>
+              <input class="input mono" type="number" step="0.01" name="amount" required>
+            </div>
+            <div class="field">
+              <label>Vehicle / ref (optional)</label>
+              <input class="input" name="ref" placeholder="RJ14 GA 1234">
+            </div>
+          </div>
+          <div class="field">
+            <label>Note</label>
+            <input class="input" name="note" placeholder="50L HSD">
+          </div>
+          <button class="btn btn-primary" type="submit">Add to ledger</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><h3>Top outstanding</h3></div>
+        ${customers.length === 0 ? UI.emptyState({ icon: '◍', title: 'No credit customers yet' }) : `
+          <div class="table-wrap" style="border:none;">
+            <table class="t">
+              <thead><tr><th>Customer</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th style="text-align:right;">Actions</th></tr></thead>
+              <tbody>
+                ${customers.slice(0, 8).map(c => `
+                  <tr>
+                    <td><strong>${c.customer}</strong></td>
+                    <td class="num" style="color:var(--bad);">${fmt.rs(c.owed)}</td>
+                    <td class="num muted">${fmt.rs(c.paid)}</td>
+                    <td class="num" style="font-weight:700; color:${c.balance > 0 ? 'var(--bad)' : 'var(--ok)'}">${fmt.rs(c.balance)}</td>
+                    <td style="text-align:right; white-space:nowrap;">
+                      <button
+                        class="btn btn-sm btn-ghost nudge-btn"
+                        id="nudge-summary-${c.customer.replace(/[^a-zA-Z0-9]/g,'_')}"
+                        onclick="copyWhatsAppReminder('${c.customer.replace(/'/g, "\\'")}')"
+                        style="font-size:10.5px; padding:2px 8px; height:auto; margin-right:4px; border-radius:4px;"
+                        title="Copy WhatsApp outstanding reminder for ${c.customer} to clipboard"
+                      >💬 Copy Nudge</button>
+                      <button
+                        class="btn btn-sm btn-ghost"
+                        onclick="openShareModal('${c.customer.replace(/'/g, "\\'")}')"
+                        style="font-size:10.5px; padding:2px 8px; height:auto; border-radius:4px;"
+                        title="Show scannable QR code for ${c.customer}'s statement"
+                      >🔗 Share QR</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-title">
+        <h3>All entries</h3>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <small class="muted">${entries.length} records</small>
+          <button class="btn btn-sm btn-ghost" onclick="copyAllNudges()" style="font-size:10.5px; padding:2px 10px; height:auto;" title="Compile & copy reminders for ALL outstanding debtors">📋 Bulk Nudges</button>
+        </div>
+      </div>
+      ${entries.length === 0 ? UI.emptyState({ icon: '◍', title: 'No entries yet' }) : `
+        <div class="table-wrap">
+          <table class="t">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Customer</th>
+                <th>Vehicle</th>
+                <th>Note</th>
+                <th class="num">Amount (₹)</th>
+                <th style="text-align:right; white-space:nowrap;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${entries.slice().reverse().map(e => `
+                <tr>
+                  <td class="muted" style="white-space:nowrap;">${e.date}</td>
+                  <td><span class="badge ${e.type === 'sale' ? 'bad' : 'ok'}">${e.type === 'sale' ? 'Credit sale' : 'Payment'}</span></td>
+                  <td><strong>${e.customer}</strong></td>
+                  <td class="mono muted">${e.ref || '—'}</td>
+                  <td class="muted">${e.note || '—'}</td>
+                  <td class="num" style="font-weight:600; color:${e.type === 'sale' ? 'var(--bad)' : 'var(--ok)'}">${e.type === 'sale' ? '+' : '−'}${fmt.rs(e.amount)}</td>
+                  <td style="text-align:right; white-space:nowrap;">
+                    ${e.type === 'sale' ? `<button
+                        class="btn btn-sm btn-ghost nudge-btn"
+                        id="nudge-entry-${e.id}"
+                        onclick="copyWhatsAppReminder('${e.customer.replace(/'/g, "\\'")}')"
+                        style="font-size:10px; padding:2px 7px; height:auto; margin-right:3px; border-radius:4px;"
+                        title="Copy WhatsApp reminder for ${e.customer}"
+                      >💬</button>` : ''}
+                    <button class="btn btn-sm btn-ghost" data-rm="${e.id}" style="border-radius:4px;">✕</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+
+  document.getElementById('cr-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const entry = {
+      id: 'cr_' + Date.now().toString(36),
+      type: fd.get('type'),
+      date: fd.get('date'),
+      customer: fd.get('customer').trim(),
+      amount: Number(fd.get('amount')),
+      ref: fd.get('ref'),
+      note: fd.get('note'),
+      at: PumpStore.nowISO()
+    };
+    PumpStore.update('credit.add', s => { s.credit.push(entry); }, entry);
+    UI.toast('Entry added', 'ok');
+    render();
+  });
+
+  document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
+    if (!UI.confirmAction('Remove entry?')) return;
+    PumpStore.update('credit.remove', s => { s.credit = s.credit.filter(e => e.id !== b.dataset.rm); }, { id: b.dataset.rm });
+    render();
+  });
+
+  // Fetch aging summary asynchronously to append overdue warnings
+  fetch("http://localhost:8000/api/aging/summary")
+    .then(r => r.json())
+    .then(data => {
+      const summaryList = data.summary || [];
+      summaryList.forEach(c => {
+        if (c.collection_required_alert) {
+          const rows = document.querySelectorAll('#main table tbody tr');
+          rows.forEach(row => {
+            const nameEl = row.querySelector('td strong');
+            if (nameEl && nameEl.innerText.trim() === c.party_name.trim()) {
+              if (!row.querySelector('.overdue-alert')) {
+                const badge = document.createElement('span');
+                badge.className = 'badge bad overdue-alert';
+                badge.style.marginLeft = '8px';
+                badge.style.fontSize = '9.5px';
+                badge.style.padding = '2px 6px';
+                badge.style.background = 'var(--bad)';
+                badge.style.color = 'var(--bg-card)';
+                badge.style.fontWeight = 'bold';
+                badge.innerText = 'Overdue Accounts Collection Required';
+                nameEl.parentElement.appendChild(badge);
+              }
+            }
+          });
+        }
+      });
+    })
+    .catch(err => console.error("Failed to load aging alerts for credit ledger:", err));
+}
+
+function openShareModal(customerName) {
+  let modal = document.getElementById('share-qr-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'share-qr-modal';
+    modal.style.cssText = 'position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; background:rgba(15,23,42,0.85); backdrop-filter:blur(8px); transition: opacity 0.2s ease-in-out;';
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  
+  const safeName = encodeURIComponent(customerName);
+  const urlApi = `http://localhost:8000/api/share/link?party_name=${safeName}`;
+  const qrApi = `http://localhost:8000/api/share/qr?party_name=${safeName}`;
+  
+  modal.innerHTML = `
+    <div style="background:var(--bg-card); border:1px solid var(--border-soft); border-radius:16px; padding:24px; max-width:400px; width:90%; box-shadow:0 12px 40px rgba(0,0,0,0.5); text-align:center; color:var(--ink);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h4 style="margin:0; font-size:16px;">Statement Share QR Code</h4>
+        <button class="btn btn-ghost" onclick="document.getElementById('share-qr-modal').style.display='none'" style="padding:4px 10px; font-size:16px; height:auto; border-radius:50%;">✕</button>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft); margin-bottom:16px;">Loading secure local statement share link...</p>
+      <div style="width:200px; height:200px; margin: 0 auto; background: rgba(255,255,255,0.03); border-radius:12px; display:flex; align-items:center; justify-content:center;">
+        <span style="font-size:12px; color:var(--ink-soft);">Loading QR Code...</span>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+  
+  fetch(urlApi)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'success') {
+        modal.innerHTML = `
+          <div style="background:var(--bg-card); border:1px solid var(--border-soft); border-radius:16px; padding:24px; max-width:440px; width:90%; box-shadow:0 12px 40px rgba(0,0,0,0.5); text-align:center; color:var(--ink); font-family:var(--font-display);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <h4 style="margin:0; font-size:16px;">Statement Share QR Code</h4>
+              <button class="btn btn-ghost" onclick="document.getElementById('share-qr-modal').style.display='none'" style="padding:4px 10px; font-size:16px; height:auto; border-radius:50%;">✕</button>
+            </div>
+            <p style="font-size:13px; color:var(--ink-soft); margin-bottom:16px;">
+              Scan this QR code with any mobile device on the same local Wi-Fi network to view <strong>${customerName}</strong>'s ledger statement.
+            </p>
+            <div style="padding:16px; background:white; border-radius:12px; display:inline-block; margin-bottom:16px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+              <img src="${qrApi}" alt="Statement QR Code" style="width:200px; height:200px; display:block;">
+            </div>
+            <div style="background:var(--bg-soft); border:1px solid var(--border-soft); border-radius:8px; padding:10px 12px; font-size:12px; color:var(--ink-soft); word-break:break-all; font-family:var(--font-mono); margin-bottom:12px; text-align:left;">
+              <strong style="color:var(--ink);">URL Link:</strong><br>
+              <a href="${data.url}" target="_blank" style="color:var(--primary); text-decoration:none;">${data.url}</a>
+            </div>
+            <p style="font-size:11px; color:var(--ink-soft); font-style:italic;">
+              Note: This secure link changes daily. Yesterday's links are automatically expired.
+            </p>
+          </div>
+        `;
+      } else {
+        throw new Error(data.message || "Failed to generate link");
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      modal.innerHTML = `
+        <div style="background:var(--bg-card); border:1px solid var(--border-soft); border-radius:16px; padding:24px; max-width:400px; width:90%; box-shadow:0 12px 40px rgba(0,0,0,0.5); text-align:center; color:var(--ink);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h4 style="margin:0; font-size:16px;">Error</h4>
+            <button class="btn btn-ghost" onclick="document.getElementById('share-qr-modal').style.display='none'" style="padding:4px 10px; font-size:16px; height:auto; border-radius:50%;">✕</button>
+          </div>
+          <p style="color:var(--bad); font-size:14px; font-weight:600;">Failed to generate statement share link.</p>
+          <p style="font-size:12px; color:var(--ink-soft); margin-top:8px;">${err.message || 'Make sure the backend is running.'}</p>
+        </div>
+      `;
+    });
+}
+
+// ─── WhatsApp Nudge Clipboard Interface ───────────────────────────────────
+
+/**
+ * Fetches the live Hinglish reminder text for `customerName` from the backend
+ * and copies it to the host system's native clipboard.
+ *
+ * Visual states: ⏳ loading → ✓ Copied! (green, 1.8 s) → reverts
+ *                           → ✗ Error   (red,   2.0 s) → reverts
+ */
+async function copyWhatsAppReminder(customerName) {
+  // Find the button nearest to where the call came from for visual feedback
+  const allBtns = [...document.querySelectorAll('.nudge-btn')];
+  const btn = allBtns.find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(customerName)) || null;
+  const originalHTML = btn ? btn.innerHTML : null;
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳'; btn.style.opacity = '0.7'; }
+
+  try {
+    const url = `http://localhost:8000/api/customer/reminder?party_name=${encodeURIComponent(customerName)}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.detail || `HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    if (data.status !== 'success' || !data.reminder) throw new Error(data.detail || 'No reminder text returned');
+
+    // Write to native clipboard with execCommand fallback
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(data.reminder);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = data.reminder;
+      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (!ok) throw new Error('Clipboard execCommand failed — use HTTPS or Chrome');
+    }
+
+    if (typeof UI !== 'undefined' && UI.toast) UI.toast(`✓ Reminder for "${customerName}" copied!`, 'ok');
+    if (btn) {
+      btn.innerHTML = '✓ Copied!'; btn.style.color = 'var(--ok,#10B981)'; btn.style.borderColor = 'var(--ok,#10B981)'; btn.style.opacity = '1';
+      setTimeout(() => { btn.innerHTML = originalHTML; btn.style.color = ''; btn.style.borderColor = ''; btn.disabled = false; btn.style.opacity = '1'; }, 1800);
+    }
+
+  } catch (err) {
+    console.error('[CustomerAlerts] copyWhatsAppReminder:', err);
+    if (typeof UI !== 'undefined' && UI.toast) UI.toast('Copy failed: ' + err.message, 'bad');
+    else alert('Error: ' + err.message);
+    if (btn) {
+      btn.innerHTML = '✗ Error'; btn.style.color = 'var(--bad,#EF4444)'; btn.style.borderColor = 'var(--bad,#EF4444)'; btn.style.opacity = '1';
+      setTimeout(() => { btn.innerHTML = originalHTML; btn.style.color = ''; btn.style.borderColor = ''; btn.disabled = false; btn.style.opacity = '1'; }, 2000);
+    }
+  }
+}
+
+/**
+ * Fetches ALL outstanding customer reminders and copies the full
+ * concatenated block to clipboard — useful for batch WhatsApp broadcasts.
+ */
+async function copyAllNudges() {
+  const triggerBtn = event && event.currentTarget ? event.currentTarget : null;
+  if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.textContent = '⏳ Compiling...'; }
+  try {
+    const res = await fetch('http://localhost:8000/api/customer/reminder/bulk?min_balance=1');
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || 'Bulk fetch failed');
+    const allText = data.items
+      .map((item, i) => `— Reminder ${i+1} — ${item.party_name} (₹${item.balance.toFixed(2)}) —\n${item.reminder}`)
+      .join('\n\n════════════════════════════\n\n');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(allText);
+    } else {
+      const ta = document.createElement('textarea'); ta.value = allText;
+      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+      document.body.appendChild(ta); ta.focus(); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    if (typeof UI !== 'undefined' && UI.toast) UI.toast(`✓ ${data.count} nudges copied to clipboard!`, 'ok');
+    if (triggerBtn) { triggerBtn.textContent = `✓ ${data.count} Copied!`; setTimeout(() => { triggerBtn.textContent = '📋 Bulk Nudges'; triggerBtn.disabled = false; }, 2000); }
+  } catch (err) {
+    console.error('[CustomerAlerts] copyAllNudges:', err);
+    if (typeof UI !== 'undefined' && UI.toast) UI.toast('Bulk nudge failed: ' + err.message, 'bad');
+    if (triggerBtn) { triggerBtn.textContent = '📋 Bulk Nudges'; triggerBtn.disabled = false; }
+  }
+}
+
+render();
+</script>
+</body>
+</html>

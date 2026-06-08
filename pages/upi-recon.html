@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UPI Reconciliation · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+function render() {
+  const s = PumpStore.state;
+  const declared = s.shifts.reduce((a, sh) => a + Number(sh.tenders?.upi || 0), 0);
+  const records = s.upi || [];
+  const recon = Acct.reconcileUpi(declared, records);
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Records',
+      title: 'UPI Settlement Reconciliation',
+      desc: 'Match what operators declared (per-shift UPI) against what was credited to your bank account by the settlement provider.'
+    })}
+
+    <div class="grid grid-3">
+      <div class="kpi">
+        <div class="kpi-label">Declared by operators</div>
+        <div class="kpi-value">${fmt.rs(recon.declaredRs)}</div>
+        <div class="kpi-foot">Across ${s.shifts.length} closed shift${s.shifts.length === 1 ? '' : 's'}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Settled to bank</div>
+        <div class="kpi-value">${fmt.rs(recon.settledRs)}</div>
+        <div class="kpi-foot">${recon.count} settlement record${recon.count === 1 ? '' : 's'}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Difference</div>
+        <div class="kpi-value" style="color:${recon.status === 'matched' ? 'var(--ok)' : recon.status === 'short' ? 'var(--bad)' : 'var(--warn)'};">
+          ${recon.diffRs >= 0 ? '+' : ''}${fmt.rs(recon.diffRs)}
+        </div>
+        <div class="kpi-foot"><span class="badge ${recon.status === 'matched' ? 'ok' : recon.status === 'short' ? 'bad' : 'warn'}"><span class="dot"></span>${recon.status}</span></div>
+      </div>
+    </div>
+
+    ${recon.status === 'short' ? `
+      <div class="alert bad mt-3">
+        <span class="icon">⚠</span>
+        <div>Settlement is ${fmt.rs(Math.abs(recon.diffRs))} less than declared. Possible causes: failed transactions logged as success, refunds, or operator entry error. Check the settlement report from your aggregator.</div>
+      </div>
+    ` : recon.status === 'excess' ? `
+      <div class="alert warn mt-3">
+        <span class="icon">⚠</span>
+        <div>Settlement is ${fmt.rs(Math.abs(recon.diffRs))} <em>more</em> than declared. Possibly an unrecorded UPI sale or duplicate settlement entry.</div>
+      </div>
+    ` : ''}
+
+    <div class="card mt-3">
+      <div class="card-title">
+        <h3>Add settlement record</h3>
+      </div>
+      <form id="upi-form" class="grid grid-4" style="align-items: end;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Date</label>
+          <input class="input" type="date" name="date" required value="${new Date().toISOString().slice(0,10)}">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Provider</label>
+          <select class="select" name="provider">
+            <option>Paytm</option><option>PhonePe</option><option>BharatPe</option><option>Google Pay</option><option>HDFC Bank</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Amount (₹)</label>
+          <input class="input mono" type="number" step="0.01" name="amount" required placeholder="0.00">
+        </div>
+        <button class="btn btn-primary" type="submit">Add entry</button>
+      </form>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-title">
+        <h3>Settlement records</h3>
+        <small class="muted">${records.length} record${records.length === 1 ? '' : 's'}</small>
+      </div>
+      ${records.length === 0 ? UI.emptyState({ icon: '⬢', title: 'No settlements logged yet' }) : `
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>Date</th><th>Provider</th><th>Reference</th><th class="num">Amount</th><th></th></tr></thead>
+            <tbody>
+              ${records.slice().reverse().map(r => `
+                <tr>
+                  <td>${r.date}</td>
+                  <td>${r.provider}</td>
+                  <td class="mono">${r.id}</td>
+                  <td class="num">${fmt.rs(r.amount)}</td>
+                  <td class="right"><button class="btn btn-sm btn-ghost" data-rm="${r.id}">✕</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+
+  document.getElementById('upi-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rec = { id: 'upi_' + Date.now().toString(36), date: fd.get('date'), provider: fd.get('provider'), amount: Number(fd.get('amount')) };
+    PumpStore.update('upi.add', s => { s.upi.push(rec); }, rec);
+    UI.toast('Settlement added', 'ok');
+    render();
+  });
+
+  document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
+    if (!UI.confirmAction('Remove this settlement record?')) return;
+    PumpStore.update('upi.remove', s => { s.upi = s.upi.filter(r => r.id !== b.dataset.rm); }, { id: b.dataset.rm });
+    render();
+  });
+}
+
+render();
+</script>
+</body>
+</html>

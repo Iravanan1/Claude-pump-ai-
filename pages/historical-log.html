@@ -1,0 +1,2364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>History Workspace · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+  /* Premium Dark Mode & Layout Stylings */
+  .workspace-layout {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 100px);
+    gap: 16px;
+    margin-top: 10px;
+  }
+  
+  .history-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+  
+  .search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-md);
+    padding: 8px 16px;
+    width: 100%;
+    max-width: 420px;
+  }
+  .search-input {
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    font-size: 14px;
+    outline: none;
+    width: 100%;
+    font-family: inherit;
+  }
+  .search-icon {
+    font-size: 16px;
+    color: var(--ink-soft);
+  }
+  
+  .log-table-wrap {
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-lg);
+    overflow-y: auto;
+    flex: 1;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  }
+  .log-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .log-table th, .log-table td {
+    padding: 12px 16px;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--border-soft);
+    white-space: nowrap;
+  }
+  .log-table th {
+    background: var(--bg-sunken);
+    font-weight: 700;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .log-table tbody tr {
+    cursor: pointer;
+  }
+  .log-table tbody tr:hover {
+    background: var(--accent-bg);
+  }
+  .currency-col {
+    font-family: var(--font-mono);
+    text-align: right;
+  }
+  
+  /* Status badges */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .status-badge.verified {
+    background: var(--ok-bg) !important;
+    color: var(--ok) !important;
+    border: 1px solid rgba(0, 200, 100, 0.15);
+  }
+  .status-badge.pending {
+    background: rgba(255, 140, 0, 0.1) !important;
+    color: darkorange !important;
+    border: 1px solid rgba(255, 140, 0, 0.2);
+  }
+  .status-badge.matched {
+    background: rgba(0, 200, 100, 0.1) !important;
+    color: #00c864 !important;
+    border: 1px solid rgba(0, 200, 100, 0.2);
+  }
+  .status-badge.missing {
+    background: rgba(255, 140, 0, 0.1) !important;
+    color: #ff8c00 !important;
+    border: 1px solid rgba(255, 140, 0, 0.2);
+  }
+  .status-badge.unauth {
+    background: rgba(255, 69, 58, 0.1) !important;
+    color: #ff453a !important;
+    border: 1px solid rgba(255, 69, 58, 0.2);
+  }
+  
+  /* Split overlay modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(20, 18, 16, 0.85);
+    backdrop-filter: blur(5px);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-box {
+    width: 90vw;
+    height: 85vh;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  }
+  .modal-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-sunken);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    overflow: hidden;
+  }
+  .modal-left {
+    background: #141210;
+    border-right: 1px solid var(--border-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: 20px;
+    position: relative;
+  }
+  .modal-right {
+    overflow-y: auto;
+    padding: 24px;
+    background: var(--bg-soft);
+  }
+  .close-modal-btn {
+    background: transparent;
+    border: none;
+    font-size: 26px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    line-height: 1;
+  }
+  .close-modal-btn:hover {
+    color: var(--ink);
+  }
+  .modal-image {
+    max-width: 100%;
+    max-height: 100%;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    border-radius: var(--r-md);
+  }
+  
+  .kpi-pill {
+    font-size: 12px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  
+  /* Secure Glassmorphic Export Confirmation Modal */
+  .export-modal-box {
+    width: 92vw;
+    max-width: 460px;
+    background: rgba(30, 27, 24, 0.96);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-lg);
+    padding: 32px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(12px);
+    text-align: center;
+    border-top: 4px solid var(--accent);
+  }
+  .security-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 69, 58, 0.15);
+    color: #ff453a;
+    border: 1px solid rgba(255, 69, 58, 0.3);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 20px;
+  }
+
+  /* ── Bank Discrepancy Panel ── */
+  .bank-discrepancy-panel {
+    background: rgba(255, 140, 0, 0.06);
+    border: 1.5px solid rgba(255, 140, 0, 0.3);
+    border-left: 4px solid #ff8c00;
+    border-radius: var(--r-md);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    animation: slideDown 0.3s ease-out;
+  }
+  .bank-discrepancy-panel.no-issues {
+    background: rgba(0, 200, 100, 0.05);
+    border-color: rgba(0, 200, 100, 0.25);
+    border-left-color: #00c864;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .discrepancy-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .discrepancy-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #ff8c00;
+  }
+  .discrepancy-title.ok { color: #00c864; }
+  .discrepancy-kpi-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .discrepancy-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 110px;
+  }
+  .discrepancy-kpi label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    letter-spacing: 0.4px;
+  }
+  .discrepancy-kpi strong {
+    font-size: 15px;
+    font-family: var(--font-mono);
+    color: var(--ink);
+  }
+  .discrepancy-kpi strong.danger { color: #ff453a; }
+  .discrepancy-kpi strong.ok    { color: #00c864;  }
+  .missing-entries-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    margin-top: 8px;
+  }
+  .missing-entries-table th {
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .missing-entries-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--ink);
+  }
+  .missing-entries-table td.amount-col {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: #ff453a;
+    text-align: right;
+  }
+  .missing-entries-table tr:last-child td { border-bottom: none; }
+  .bank-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    border: 1px solid rgba(255, 140, 0, 0.4);
+    background: rgba(255, 140, 0, 0.08);
+    color: #ff8c00;
+    transition: all 0.15s ease;
+  }
+  .bank-upload-btn:hover {
+    background: rgba(255, 140, 0, 0.18);
+    border-color: #ff8c00;
+  }
+
+  /* Bank Upload Modal */
+  .bank-upload-modal-box {
+    width: 92vw;
+    max-width: 500px;
+    background: rgba(28, 25, 22, 0.98);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-lg);
+    padding: 32px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+    backdrop-filter: blur(12px);
+    border-top: 4px solid #ff8c00;
+  }
+  .bank-file-drop {
+    border: 2px dashed rgba(255, 140, 0, 0.35);
+    border-radius: var(--r-md);
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin: 16px 0;
+    background: rgba(255, 140, 0, 0.03);
+  }
+  .bank-file-drop:hover, .bank-file-drop.drag-over {
+    border-color: #ff8c00;
+    background: rgba(255, 140, 0, 0.08);
+  }
+  .bank-select-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .bank-select-row select {
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-soft);
+    color: var(--ink);
+    padding: 7px 12px;
+    border-radius: var(--r-sm);
+    font-size: 13px;
+    flex: 1;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<!-- Unified Modal Review Overlay -->
+<div class="modal-overlay" id="history-modal" onclick="if(event.target === this) closeModal();">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 style="font-family: var(--font-display); margin: 0;">Original Register & Audited Ledger</h3>
+      <button class="close-modal-btn" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-left">
+        <img id="modal-register-img" class="modal-image" src="" alt="Handwritten daily register log sheet">
+      </div>
+      <div class="modal-right" id="modal-details-container">
+        <!-- Structured details populated dynamically -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Secure Export Confirmation Modal -->
+<div class="modal-overlay" id="export-confirm-modal" onclick="if(event.target === this) closeExportModal();">
+  <div class="export-modal-box">
+    <div class="security-badge">
+      ⚠️ Data Security Notice
+    </div>
+    <h3 style="font-family: var(--font-display); margin-bottom: 12px; color: var(--ink);">Unencrypted Export Download</h3>
+    <p style="font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 24px; text-align: left;">
+      This action compiles and downloads the complete database ledger as an <strong>unencrypted plain-text spreadsheet file</strong>. 
+      <br><br>
+      Please ensure you are on a trusted secure device, and that this document is stored in a protected folder on your system.
+    </p>
+    <div style="display: flex; gap: 12px; justify-content: center;">
+      <button class="btn btn-ghost" onclick="closeExportModal()" style="padding: 10px 20px;">Cancel</button>
+      <button class="btn btn-primary" id="confirm-export-download-btn" onclick="executeExportDownload()" style="padding: 10px 24px; font-weight: 700; background: var(--accent); color: #000; border: none; border-radius: var(--r-md); cursor: pointer;">
+        Confirm & Download
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Fleet Card Statement Upload Modal -->
+<div class="modal-overlay" id="fleet-upload-modal" onclick="if(event.target===this) closeFleetUploadModal();">
+  <div class="bank-upload-modal-box" style="border-top-color: var(--accent);">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+      <div>
+        <h3 style="font-family:var(--font-display); margin:0 0 4px 0; font-size:18px; color:var(--ink);">Upload Fleet Portal CSV</h3>
+        <p style="font-size:12.5px; color:var(--ink-soft); margin:0;">Upload oil company statements to match against handwritten digital logs.</p>
+      </div>
+      <button onclick="closeFleetUploadModal()" style="background:transparent; border:none; font-size:24px; color:var(--ink-soft); cursor:pointer; line-height:1;">&times;</button>
+    </div>
+    
+    <div class="bank-select-row">
+      <label style="font-size:12px; font-weight:700; color:var(--ink-soft); white-space:nowrap;">Provider Name</label>
+      <select id="fleet-provider-select">
+        <option value="IOCL">IOCL XTRAPOWER</option>
+        <option value="HPCL">HPCL DriveTrack Plus</option>
+      </select>
+    </div>
+    
+    <div class="bank-file-drop" id="fleet-drop-zone"
+         onclick="document.getElementById('fleet-csv-input').click()"
+         ondragover="event.preventDefault(); this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleFleetFileDrop(event)">
+      <div style="font-size:28px; margin-bottom:8px;">📁</div>
+      <div style="font-weight:700; color:var(--ink); margin-bottom:4px;">Drop your CSV statement here or click to browse</div>
+      <div style="font-size:12px; color:var(--ink-soft);" id="fleet-file-name">No file selected — CSV only</div>
+    </div>
+    <input type="file" id="fleet-csv-input" accept=".csv" style="display:none" onchange="onFleetFileSelected(this)">
+    
+    <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">
+      <button class="btn btn-ghost" onclick="closeFleetUploadModal()" style="padding:8px 16px;">Cancel</button>
+      <button id="fleet-upload-submit-btn" onclick="submitFleetStatementUpload()"
+              style="padding:8px 20px; font-weight:700; background:var(--accent); color:#000; border:none; border-radius:var(--r-md); cursor:pointer; font-size:13px;">
+        📤 Upload Statement
+      </button>
+    </div>
+    <div id="fleet-upload-status" style="margin-top:12px; font-size:13px; display:none;"></div>
+  </div>
+</div>
+
+<!-- Bank Statement Upload Modal -->
+<div class="modal-overlay" id="bank-upload-modal" onclick="if(event.target===this) closeBankUploadModal();">
+  <div class="bank-upload-modal-box">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <div>
+        <h3 style="font-family:var(--font-display); margin:0 0 4px 0; font-size:18px; color:var(--ink);">Upload Bank Statement PDF</h3>
+        <p style="font-size:12.5px; color:var(--ink-soft); margin:0;">Upload your SBI / HDFC / Axis monthly statement to cross-reference digital drops.</p>
+      </div>
+      <button onclick="closeBankUploadModal()" style="background:transparent; border:none; font-size:24px; color:var(--ink-soft); cursor:pointer; line-height:1;">×</button>
+    </div>
+
+    <!-- Bank selector -->
+    <div class="bank-select-row">
+      <label style="font-size:12px; font-weight:700; color:var(--ink-soft); white-space:nowrap;">Bank Name</label>
+      <select id="bank-name-select">
+        <option value="generic">Auto-detect (Generic)</option>
+        <option value="SBI">SBI — State Bank of India</option>
+        <option value="HDFC">HDFC Bank</option>
+        <option value="Axis">Axis Bank</option>
+        <option value="ICICI">ICICI Bank</option>
+        <option value="PNB">PNB</option>
+      </select>
+    </div>
+
+    <!-- Drop zone -->
+    <div class="bank-file-drop" id="bank-drop-zone"
+         onclick="document.getElementById('bank-pdf-input').click()"
+         ondragover="event.preventDefault(); this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleBankFileDrop(event)">
+      <div style="font-size:28px; margin-bottom:8px;">📄</div>
+      <div style="font-weight:700; color:var(--ink); margin-bottom:4px;">Drop your PDF here or click to browse</div>
+      <div style="font-size:12px; color:var(--ink-soft);" id="bank-file-name">No file selected — PDF only</div>
+    </div>
+    <input type="file" id="bank-pdf-input" accept=".pdf" style="display:none" onchange="onBankFileSelected(this)">
+
+    <!-- Action buttons -->
+    <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">
+      <button class="btn btn-ghost" onclick="closeBankUploadModal()" style="padding:8px 16px;">Cancel</button>
+      <button id="bank-upload-submit-btn" onclick="submitBankStatementUpload()"
+              style="padding:8px 20px; font-weight:700; background:#ff8c00; color:#000; border:none; border-radius:var(--r-md); cursor:pointer; font-size:13px;">
+        📤 Upload & Parse
+      </button>
+    </div>
+
+    <!-- Status message -->
+    <div id="bank-upload-status" style="margin-top:12px; font-size:13px; display:none;"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     Rollback Confirmation Modal
+     ═══════════════════════════════════════════════════════════= -->
+<div class="modal-overlay" id="rollback-modal"
+     onclick="if(event.target===this) closeRollbackModal()"
+     style="display:none;z-index:9900;">
+  <div style="width:92vw;max-width:480px;background:rgba(18,10,10,0.98);
+              border:1px solid rgba(239,68,68,0.4);
+              border-top:4px solid #ef4444;
+              border-radius:var(--r-lg);padding:32px;
+              box-shadow:0 24px 64px rgba(0,0,0,0.8);
+              backdrop-filter:blur(12px);">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="font-size:28px;line-height:1;">⚠️</span>
+      <h3 style="font-family:var(--font-display);margin:0;font-size:18px;color:#ef4444;">
+        Rollback Last Import Batch?
+      </h3>
+    </div>
+
+    <!-- Warning body -->
+    <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin:12px 0 20px;">
+      This will <strong style="color:var(--ink);">permanently replace</strong> the current production
+      database with the most recent automatic snapshot created before your last batch import.<br><br>
+      Any data entered <em>after</em> that snapshot was taken will be lost. The current database
+      will be kept as a safety copy (<code>.rollback_evicted</code>) on disk.
+    </p>
+
+    <!-- Snapshot info box -->
+    <div id="rollback-snapshot-info"
+         style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.25);
+                border-radius:var(--r-sm);padding:12px 14px;margin-bottom:20px;
+                font-size:12.5px;color:var(--ink-soft);">
+      <div style="font-weight:700;color:#ef4444;margin-bottom:6px;text-transform:uppercase;
+                  font-size:10.5px;letter-spacing:.5px;">⏱ Latest Snapshot</div>
+      <div id="rollback-snapshot-detail">Loading snapshot info…</div>
+    </div>
+
+    <!-- Action buttons -->
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button id="btn-rollback-cancel" onclick="closeRollbackModal()"
+              class="btn btn-ghost" style="padding:9px 20px;font-size:13px;">
+        Cancel
+      </button>
+      <button id="btn-rollback-confirm" onclick="executeRollback()"
+              style="padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;
+                     background:#ef4444;color:#fff;border:none;
+                     border-radius:var(--r-md);transition:all 0.15s;
+                     display:inline-flex;align-items:center;gap:6px;">
+        ⏪ Yes, Rollback Now
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+// State Management
+let allEntries = [];
+
+async function loadHistoryLog() {
+  const main = document.getElementById('main');
+  
+  // 1. Render HistoryView Dashboard Frame
+  main.innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Operations Ledger',
+      title: 'HistoryView Dashboard',
+      desc: 'High-speed audit overview. Easily search and inspect handwritten daily registers side-by-side with verified SQLite tables.',
+      actions: `
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-ghost" onclick="toggleAnalyticsDashboard()" style="display: inline-flex; align-items: center; gap: 6px;">
+            <span>📈 Toggle Analytics Panel</span>
+          </button>
+          <button class="btn btn-ghost" onclick="confirmSecureExport('excel')" style="display: inline-flex; align-items: center; gap: 6px;">
+            <span>📊 Export Master Excel Book</span>
+          </button>
+          <button class="btn btn-primary" onclick="confirmSecureExport('petrobyte')" style="display: inline-flex; align-items: center; gap: 6px;">
+            <span>📝 Generate PetroByte Import CSV</span>
+          </button>
+        </div>
+      `
+    })}
+    
+    <div class="workspace-layout">
+      <!-- ── Operations Analytics Dashboard Collapsible Panel ── -->
+      <div id="operations-analytics-container" style="margin-bottom: 16px;"></div>
+
+      <!-- ── Bank Digital Collections Discrepancy Alert Panel ── -->
+      <div id="bank-discrepancy-panel-container"></div>
+
+      <!-- ── Corporate Fleet Cards Reconciliation Panel ── -->
+      <div id="fleet-reconciliation-container" style="margin-bottom: 16px;"></div>
+
+      <!-- ── Credit Payments Realized Log Panel ── -->
+      <div id="credit-realizations-container" style="margin-bottom: 16px;"></div>
+
+      <!-- ── Credit Ledger Aging & Risk Evaluation Panel ── -->
+      <div id="credit-aging-container" style="margin-bottom: 16px;"></div>
+
+      <!-- Search and Filter Bar -->
+      <div class="history-controls">
+        <div style="display: flex; align-items: center; gap: 8px; width: 100%; max-width: 470px;">
+          <div class="search-wrap" style="max-width: none; flex: 1;">
+            <span class="search-icon">🔍</span>
+            <input class="search-input" type="text" id="history-search" placeholder="Search by Date, Customer / Party Name, or License Plate..." autocomplete="off">
+          </div>
+          <button class="btn btn-ghost" onclick="toggleSettingsTray()" style="padding: 8px 12px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-md); min-height: 38px;" title="Database Maintenance & Recovery">
+            <span style="font-size: 18px; line-height: 1;">⚙️</span>
+          </button>
+        </div>
+        <div style="font-size: 13px; color: var(--ink-soft);" id="results-count">Loading entries...</div>
+      </div>
+      
+      <!-- Sleek Collapsible Settings Tray -->
+      <div id="settings-tray" style="display: none; background: var(--bg-sunken); border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 16px; margin-bottom: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <h4 style="margin: 0 0 8px 0; font-family: var(--font-display); font-size: 14px; color: var(--accent);">⚙️ Database Maintenance & Recovery</h4>
+        <p style="font-size: 12.5px; color: var(--ink-soft); margin: 0 0 12px 0; line-height: 1.4;">
+          If your master accounts spreadsheet <code>Pump_Accounts.xlsx</code> is open, missing, or corrupted, trigger a complete database refresh to rebuild a brand-new, chronological Excel workbook from scratch.
+        </p>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button class="btn btn-ghost" onclick="triggerSpreadsheetRebuild()" style="border: 1px dashed var(--accent); color: var(--accent); display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;">
+            <span>🔧 Rebuild Master Excel from Database</span>
+          </button>
+          <button class="bank-upload-btn" onclick="openBankUploadModal()" id="bank-upload-tray-btn">
+            🏦 Upload Bank Statement PDF
+          </button>
+          <button
+            id="btn-create-snapshot"
+            onclick="createManualSnapshot()"
+            style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;
+                   padding:6px 12px;border-radius:var(--r-sm);cursor:pointer;
+                   background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.4);
+                   color:#22c55e;transition:all 0.15s;">
+            💾 Create Snapshot Now
+          </button>
+          <button
+            id="btn-rollback-session"
+            onclick="openRollbackModal()"
+            style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;
+                   padding:6px 12px;border-radius:var(--r-sm);cursor:pointer;
+                   background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.4);
+                   color:#ef4444;transition:all 0.15s;">
+            ⏪ Rollback Last Import Batch
+          </button>
+        </div>
+        <div id="snapshot-status-bar" style="display:none;margin-top:10px;font-size:12px;padding:7px 12px;
+             border-radius:var(--r-sm);border:1px solid transparent;"></div>
+      </div>
+      
+      <!-- FTS Search Results Gallery Container (Prompt 70) -->
+      <div id="search-gallery" style="display: none; background: var(--bg-sunken); border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 20px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
+        <h4 style="margin: 0 0 16px 0; font-family: var(--font-display); font-size: 14px; color: var(--accent); display: flex; align-items: center; gap: 8px;">
+          <span>📸 Matching Register Pages Gallery</span>
+        </h4>
+        <div id="search-gallery-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px;"></div>
+      </div>
+
+      <!-- History Data Table Container -->
+      <div class="log-table-wrap">
+        <div style="padding: 80px 0; text-align: center;" id="table-loader">
+          <div class="custom-spinner" style="width: 44px; height: 44px; border: 4px solid var(--border-soft); border-top: 4px solid var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px;"></div>
+          <h4 style="font-family: var(--font-display); margin-bottom: 4px;">Loading local SQLite database...</h4>
+          <p class="muted" style="font-size: 13.5px;">Retrieving complete ledger accounts and OCR image indices...</p>
+        </div>
+        
+        <table class="log-table" id="history-table" style="display: none;">
+          <thead>
+            <tr>
+              <th style="text-align: center; width: 140px;">Date</th>
+              <th class="num">Total Diesel (Ltrs)</th>
+              <th class="num">Total Petrol (Ltrs)</th>
+              <th class="num">Cash Collected</th>
+              <th style="text-align: center; width: 150px;">Validation Status</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <!-- Filtered rows injected dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  
+  // 2. Retrieve history log entries from FastAPI SQLite joined tables
+  try {
+    const response = await fetch("http://localhost:8000/api/historical-log");
+    if (!response.ok) {
+      throw new Error("HTTP error " + response.status + ": Could not read SQLite daily summaries.");
+    }
+    
+    allEntries = await response.json();
+    console.log("Historical entries successfully loaded:", allEntries);
+    
+    // Hide loader and show history table
+    const loader = document.getElementById('table-loader');
+    if (loader) loader.style.display = 'none';
+    
+    const table = document.getElementById('history-table');
+    if (table) table.style.display = 'table';
+    
+    // Initial rendering of all records
+    renderHistoryRows(allEntries);
+    
+    // Bind Real-Time Search listener
+    const searchInp = document.getElementById('history-search');
+    if (searchInp) {
+      searchInp.addEventListener('input', () => {
+        filterHistoryLog();
+      });
+    }
+    
+  } catch (error) {
+    console.error("Fetch failure:", error);
+    const loader = document.getElementById('table-loader');
+    if (loader) {
+      loader.innerHTML = `
+        <div class="alert bad" style="max-width: 600px; margin: 0 auto; text-align: left;">
+          <strong>⚠️ SQLite Ledger Connection Offline</strong><br>
+          <span style="font-size: 13px;">${error.message}. Please verify that the local Python FastAPI Uvicorn backend is running at http://localhost:8000/api.</span>
+        </div>
+      `;
+    }
+  }
+  // Load bank discrepancy panel after the main log is ready
+  loadBankDiscrepancyPanel();
+  
+  // Load fleet cards reconciliation panel after the main log is ready
+  loadFleetReconciliationPanel();
+  
+  // Render the Operations Analytics dashboard if expanded
+  renderAnalyticsDashboard();
+
+  // Render the Credit Payments Realizations Log
+  renderCreditRealizationsLog();
+
+  // Render the Credit Ledger Aging & Risk Evaluation Panel
+  renderCreditAgingPanel();
+}
+
+// ----------------------------------------------------
+// Real-Time Search Filter Engine & Gallery Linkage (Prompt 70)
+// ----------------------------------------------------
+async function filterHistoryLog() {
+  const query = document.getElementById('history-search').value.trim();
+  
+  if (!query) {
+    const galleryDiv = document.getElementById('search-gallery');
+    if (galleryDiv) galleryDiv.style.display = 'none';
+    renderHistoryRows(allEntries);
+    return;
+  }
+  
+  // 1. Perform local structured field matching
+  const queryLower = query.toLowerCase();
+  const localFiltered = allEntries.filter(e => {
+    // Check Date match
+    if (e.date.toLowerCase().includes(queryLower)) return true;
+    
+    // Check Party Names and Vehicle Numbers inside detailed credit list in raw_data
+    const creditList = (e.raw_data && e.raw_data.credit_sales) || [];
+    const hasCreditMatch = creditList.some(cs => {
+      const party = (cs.party_name || "").toLowerCase();
+      const vehicle = (cs.vehicle_no || "").toLowerCase();
+      const remarks = (cs.remarks || "").toLowerCase();
+      return party.includes(queryLower) || vehicle.includes(queryLower) || remarks.includes(queryLower);
+    });
+    
+    if (hasCreditMatch) return true;
+    
+    // Check cash expenses detailed notes
+    const expensesList = (e.raw_data && e.raw_data.cash_expenses) || [];
+    const hasExpenseMatch = expensesList.some(ex => {
+      const label = (ex.party_name || "").toLowerCase();
+      const remarks = (ex.remarks || "").toLowerCase();
+      return label.includes(queryLower) || remarks.includes(queryLower);
+    });
+    
+    if (hasExpenseMatch) return true;
+    
+    // Check warning logs or explanations
+    const warnings = (e.raw_data && e.raw_data.hinglish_notes) || [];
+    const hasWarningMatch = warnings.some(w => w.toLowerCase().includes(queryLower));
+    if (hasWarningMatch) return true;
+    
+    return false;
+  });
+  
+  // 2. Perform async full-text search match via API
+  try {
+    const res = await fetch(`http://localhost:8000/api/search/archive?q=${encodeURIComponent(query)}`);
+    if (res.ok) {
+      const data = await res.json();
+      const ftsDates = data.dates || [];
+      
+      // Select entries matching FTS dates
+      const ftsMatchingEntries = allEntries.filter(e => ftsDates.includes(e.date));
+      
+      // Combine local filtered entries and FTS matched entries without duplicates
+      const combinedMap = new Map();
+      localFiltered.forEach(e => combinedMap.set(e.date, e));
+      ftsMatchingEntries.forEach(e => combinedMap.set(e.date, e));
+      const combinedFiltered = Array.from(combinedMap.values());
+      
+      // Sort combined array chronologically newest first
+      combinedFiltered.sort((a, b) => b.date.localeCompare(a.date));
+      
+      renderHistoryRows(combinedFiltered);
+      renderSearchGallery(ftsMatchingEntries);
+    } else {
+      renderHistoryRows(localFiltered);
+      const galleryDiv = document.getElementById('search-gallery');
+      if (galleryDiv) galleryDiv.style.display = 'none';
+    }
+  } catch (err) {
+    console.error("FTS search execution failed:", err);
+    renderHistoryRows(localFiltered);
+    const galleryDiv = document.getElementById('search-gallery');
+    if (galleryDiv) galleryDiv.style.display = 'none';
+  }
+}
+
+function renderSearchGallery(entries) {
+  const galleryDiv = document.getElementById('search-gallery');
+  const grid = document.getElementById('search-gallery-grid');
+  if (!galleryDiv || !grid) return;
+  
+  grid.innerHTML = '';
+  
+  if (entries.length === 0) {
+    galleryDiv.style.display = 'none';
+    return;
+  }
+  
+  entries.forEach(e => {
+    const raw = e.raw_data || {};
+    const imgUrl = raw.split_image_url || raw.image_url || "http://localhost:8000/uploaded_raw_photos/skewed_test_raw.png";
+    
+    const card = document.createElement('div');
+    card.style.cssText = `
+      border: 1px solid var(--border-soft);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      cursor: pointer;
+      background: var(--bg-card);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      height: 220px;
+    `;
+    
+    // Smooth hover visual upgrades
+    card.addEventListener('mouseenter', () => {
+      card.style.transform = 'translateY(-4px)';
+      card.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.4)';
+      card.style.borderColor = 'var(--accent)';
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.transform = 'translateY(0)';
+      card.style.boxShadow = 'none';
+      card.style.borderColor = 'var(--border-soft)';
+    });
+    
+    card.innerHTML = `
+      <div style="flex: 1; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center;">
+        <img src="${imgUrl}" alt="Register thumbnail ${e.date}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.85; transition: opacity 0.2s;">
+      </div>
+      <div style="padding: 10px; text-align: center; border-top: 1px solid var(--border-soft); background: var(--bg-sunken);">
+        <span class="mono" style="font-size: 12px; font-weight: 700; color: var(--accent);">${e.date}</span>
+      </div>
+    `;
+    
+    card.addEventListener('click', () => openModal(e));
+    grid.appendChild(card);
+  });
+  
+  galleryDiv.style.display = 'block';
+}
+
+// ----------------------------------------------------
+// UI Data Grid Rendering
+// ----------------------------------------------------
+function renderHistoryRows(entries) {
+  const tbody = document.getElementById('history-tbody');
+  const countDisplay = document.getElementById('results-count');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '';
+  countDisplay.textContent = `Showing ${entries.length} daily operational ledger entries`;
+  
+  if (entries.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; padding: 40px; color: var(--ink-soft);">
+          🔍 No daily entries found matching your active search criteria.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+  
+  entries.forEach(e => {
+    const tr = document.createElement('tr');
+    
+    // Setup columns: Date, Total Diesel Liters (HSD), Total Petrol Liters (MS), Cash Collected, Pending Reviews
+    tr.innerHTML = `
+      <td class="mono" style="font-weight: 700; text-align: center; color: var(--accent);">${e.date}</td>
+      <td class="currency-col" style="font-weight: 500;">${fmt.num(e.total_hsd_liters || 0, 2)} L</td>
+      <td class="currency-col" style="font-weight: 500;">${fmt.num(e.total_ms_liters || 0, 2)} L</td>
+      <td class="currency-col" style="font-weight: 600; color: var(--ink);">₹${fmt.num(e.total_cash_calculated || 0, 2)}</td>
+      <td style="text-align: center;">
+        <span class="status-badge ${e.is_verified === 1 ? 'verified' : 'pending'}">
+          ${e.is_verified === 1 ? '✓ Verified' : '⚠ Pending Review'}
+        </span>
+      </td>
+    `;
+    
+    // Row click opens the split-screen modal
+    tr.addEventListener('click', () => openModal(e));
+    tbody.appendChild(tr);
+  });
+}
+
+// ----------------------------------------------------
+// Dual Panel Modal Detail REVIEW
+// ----------------------------------------------------
+function openModal(entry) {
+  const modal = document.getElementById('history-modal');
+  const modalImg = document.getElementById('modal-register-img');
+  const container = document.getElementById('modal-details-container');
+  
+  // Set original notebook photo
+  const raw = entry.raw_data || {};
+  const imagePath = raw.image_url || "http://localhost:8000/uploaded_raw_photos/skewed_test_raw.png";
+  modalImg.src = imagePath;
+  
+  const nozzles = raw.nozzles || [];
+  const creditSales = raw.credit_sales || [];
+  const cashExpenses = raw.cash_expenses || [];
+  
+  // Build premium tabular summary of the day's transactions
+  let html = `
+    <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--border-soft); padding-bottom: 12px; margin-bottom: 20px;">
+      <div>
+        <h2 style="font-family: var(--font-display); margin: 0 0 4px 0; font-size: 24px;">Daily Sales Review</h2>
+        <span class="mono" style="font-size: 14px; font-weight: 700; color: var(--accent);">${entry.date}</span>
+      </div>
+      <div>
+        <span class="status-badge ${entry.is_verified === 1 ? 'verified' : 'pending'}" style="font-size:12px; padding: 4px 12px;">
+          ${entry.is_verified === 1 ? '✓ Balanced & Approved' : '⚠ Requires Auditor Review'}
+        </span>
+      </div>
+    </div>
+    
+    <div class="grid grid-2" style="gap: 12px; margin-bottom: 24px;">
+      <div style="background: var(--bg-sunken); border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 12px;">
+        <span style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--ink-soft); display: block; margin-bottom: 4px;">Total Sales Volume</span>
+        <strong style="font-size: 20px; font-family: var(--font-mono); color: var(--ink);">${fmt.num(entry.total_sales_liters, 2)} L</strong>
+      </div>
+      <div style="background: var(--bg-sunken); border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 12px;">
+        <span style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--ink-soft); display: block; margin-bottom: 4px;">Revenue Secured (INR)</span>
+        <strong style="font-size: 20px; font-family: var(--font-mono); color: var(--accent);">₹${fmt.num(entry.total_cash_calculated, 2)}</strong>
+      </div>
+    </div>
+    
+    <h4 style="font-size: 12.5px; font-weight: 700; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--border-soft); padding-bottom: 4px; margin-bottom: 12px; letter-spacing: 0.5px;">1 · Dispenser Nozzle Sequences</h4>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border-soft); text-align: left; color: var(--ink-soft);">
+          <th style="padding: 6px 4px;">Fuel Nozzle</th>
+          <th style="padding: 6px 4px; text-align: right;">Opening</th>
+          <th style="padding: 6px 4px; text-align: right;">Closing</th>
+          <th style="padding: 6px 4px; text-align: right;">Gross Liters</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  
+  if (nozzles.length === 0) {
+    html += `
+      <tr>
+        <td style="padding: 8px 4px; font-weight: 600;">MS-1 (Petrol)</td>
+        <td style="padding: 8px 4px; text-align: right;" class="mono muted">-</td>
+        <td style="padding: 8px 4px; text-align: right;" class="mono muted">-</td>
+        <td style="padding: 8px 4px; text-align: right;" class="mono" style="font-weight: 600;">${fmt.num(entry.total_ms_liters, 2)} L</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 4px; font-weight: 600;">HSD-1 (Diesel)</td>
+        <td style="padding: 8px 4px; text-align: right;" class="mono muted">-</td>
+        <td style="padding: 8px 4px; text-align: right;" class="mono muted">-</td>
+        <td style="padding: 8px 4px; text-align: right;" class="mono" style="font-weight: 600;">${fmt.num(entry.total_hsd_liters, 2)} L</td>
+      </tr>
+    `;
+  } else {
+    nozzles.forEach(nz => {
+      html += `
+        <tr>
+          <td style="padding: 8px 4px; font-weight: 600;">${nz.nozzle_name}</td>
+          <td style="padding: 8px 4px; text-align: right;" class="mono">${fmt.num(nz.opening, 2)}</td>
+          <td style="padding: 8px 4px; text-align: right;" class="mono">${fmt.num(nz.closing, 2)}</td>
+          <td style="padding: 8px 4px; text-align: right;" class="mono" style="font-weight: 600;">${fmt.num(nz.sales_liters_calculated || nz.net_sales_liters || 0, 2)} L</td>
+        </tr>
+      `;
+    });
+  }
+  
+  html += `
+      </tbody>
+    </table>
+    
+    <h4 style="font-size: 12.5px; font-weight: 700; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--border-soft); padding-bottom: 4px; margin-bottom: 12px; letter-spacing: 0.5px;">2 · Credit Sales Ledger (Udhaar)</h4>
+  `;
+  
+  if (creditSales.length === 0) {
+    html += `<p class="muted" style="font-size: 13.5px; margin-bottom: 24px;">No credit accounts billed for this date.</p>`;
+  } else {
+    html += `
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border-soft); text-align: left; color: var(--ink-soft);">
+            <th style="padding: 6px 4px;">Account Head</th>
+            <th style="padding: 6px 4px;">Vehicle Wheel No</th>
+            <th style="padding: 6px 4px; text-align: right;">Amount (INR)</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    creditSales.forEach(cs => {
+      html += `
+        <tr>
+          <td style="padding: 8px 4px; font-weight: 600; color: var(--ink);">${cs.party_name}</td>
+          <td style="padding: 8px 4px;" class="mono">${cs.vehicle_no || 'N/A'}</td>
+          <td style="padding: 8px 4px; text-align: right;" class="mono" style="font-weight: 600;">₹${fmt.num(cs.amount, 2)}</td>
+        </tr>
+      `;
+    });
+    html += `
+        </tbody>
+      </table>
+    `;
+  }
+  
+  html += `
+    <h4 style="font-size: 12.5px; font-weight: 700; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--border-soft); padding-bottom: 4px; margin-bottom: 12px; letter-spacing: 0.5px;">3 · Cash Expenses & Payouts</h4>
+  `;
+  
+  if (cashExpenses.length === 0) {
+    html += `<p class="muted" style="font-size: 13.5px; margin-bottom: 24px;">No local expenses claimed.</p>`;
+  } else {
+    html += `
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border-soft); text-align: left; color: var(--ink-soft);">
+            <th style="padding: 6px 4px;">Voucher head / Details</th>
+            <th style="padding: 6px 4px; text-align: right;">Amount (INR)</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    cashExpenses.forEach(exp => {
+      html += `
+        <tr>
+          <td style="padding: 8px 4px; font-weight: 600; color: var(--ink);">${exp.party_name || exp.remarks || 'Cash Payout'}</td>
+          <td style="padding: 8px 4px; text-align: right;" class="mono" style="font-weight: 600; color: var(--bad);">-₹${fmt.num(exp.amount, 2)}</td>
+        </tr>
+      `;
+    });
+    html += `
+        </tbody>
+      </table>
+    `;
+  }
+  
+  if (raw.hinglish_notes && raw.hinglish_notes.length > 0) {
+    html += `
+      <h4 style="font-size: 12.5px; font-weight: 700; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--border-soft); padding-bottom: 4px; margin-bottom: 12px; letter-spacing: 0.5px;">4 · AI Explanations & Warnings</h4>
+      <div style="background: rgba(255, 140, 0, 0.05); border: 1px solid rgba(255, 140, 0, 0.15); border-radius: var(--r-md); padding: 12px;">
+        <ul style="font-size: 13px; color: var(--ink-soft); margin: 0 0 0 16px; padding: 0;">
+          ${raw.hinglish_notes.map(note => `<li style="margin-bottom:4px; line-height: 1.4;">${note}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+  
+  container.innerHTML = html;
+  modal.style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('history-modal').style.display = 'none';
+}
+
+// Close modal with Escape key
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// Spin CSS keyframes inlined
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
+
+// Secure Export Confirmation Modal JS Logic
+let pendingExportType = null;
+
+function confirmSecureExport(type) {
+  pendingExportType = type;
+  const modal = document.getElementById('export-confirm-modal');
+  modal.style.display = 'flex';
+}
+
+function closeExportModal() {
+  const modal = document.getElementById('export-confirm-modal');
+  modal.style.display = 'none';
+  pendingExportType = null;
+}
+
+function executeExportDownload() {
+  if (!pendingExportType) return;
+  
+  let downloadUrl = '';
+  if (pendingExportType === 'excel') {
+    downloadUrl = 'http://localhost:8000/api/export-excel';
+  } else if (pendingExportType === 'petrobyte') {
+    downloadUrl = 'http://localhost:8000/api/export-petrobyte';
+  }
+  
+  if (downloadUrl) {
+    window.location.href = downloadUrl;
+  }
+  
+  closeExportModal();
+}
+
+// Close export modal with Escape key
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeExportModal();
+});
+
+// Toggle collapse settings tray
+function toggleSettingsTray() {
+  const tray = document.getElementById('settings-tray');
+  if (tray) {
+    if (tray.style.display === 'none') {
+      tray.style.display = 'block';
+    } else {
+      tray.style.display = 'none';
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Rollback & Snapshot Controls
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Shows the rollback confirmation modal and pre-fetches the latest snapshot. */
+async function openRollbackModal() {
+  const modal  = document.getElementById('rollback-modal');
+  const detail = document.getElementById('rollback-snapshot-detail');
+  if (!modal || !detail) return;
+
+  detail.textContent = 'Loading snapshot info…';
+  modal.style.display = 'flex';
+
+  try {
+    const resp = await fetch('http://localhost:8000/api/system/snapshots');
+    if (resp.ok) {
+      const data = await resp.json();
+      const snaps = data.snapshots || [];
+      if (snaps.length === 0) {
+        detail.innerHTML = `<span style="color:#ef4444;">⚠ No snapshots found.</span>
+          <br>Run a batch import first so a pre-batch snapshot can be captured automatically.`;
+        document.getElementById('btn-rollback-confirm').disabled = true;
+        document.getElementById('btn-rollback-confirm').style.opacity = '0.45';
+      } else {
+        const s = snaps[0];
+        detail.innerHTML = `
+          <strong style="color:var(--ink);font-family:var(--font-mono)">${s.filename}</strong><br>
+          <span>Created: ${s.created_at}</span>
+          &nbsp;·&nbsp;
+          <span>Size: ${(s.size_kb || 0).toLocaleString()} KB</span>
+          &nbsp;·&nbsp;
+          <span>Label: ${s.label}</span>`;
+        document.getElementById('btn-rollback-confirm').disabled = false;
+        document.getElementById('btn-rollback-confirm').style.opacity = '1';
+      }
+    } else {
+      detail.innerHTML = `<span style="color:#f97316;">Could not load snapshot list (backend offline?).</span>`;
+    }
+  } catch (err) {
+    detail.innerHTML = `<span style="color:#f97316;">Error: ${err.message}</span>`;
+  }
+}
+
+/** Closes the rollback modal. */
+function closeRollbackModal() {
+  const modal = document.getElementById('rollback-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+/**
+ * Fires the actual rollback API call after user confirmation.
+ * Disables buttons during execution, shows success/error in snapshot-status-bar.
+ */
+async function executeRollback() {
+  const confirmBtn = document.getElementById('btn-rollback-confirm');
+  const cancelBtn  = document.getElementById('btn-rollback-cancel');
+  const statusBar  = document.getElementById('snapshot-status-bar');
+
+  if (confirmBtn) { confirmBtn.textContent = '⏳ Rolling back…'; confirmBtn.disabled = true; }
+  if (cancelBtn)  { cancelBtn.disabled = true; }
+
+  try {
+    const resp = await fetch('http://localhost:8000/api/system/rollback-last-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await resp.json();
+
+    closeRollbackModal();
+
+    if (resp.ok && data.status === 'ok') {
+      if (statusBar) {
+        statusBar.innerHTML = `
+          ✅ <strong>Rollback successful</strong> — database restored from
+          <span style="font-family:var(--font-mono);font-weight:700;">${data.snapshot_used}</span>
+          (${data.snapshot_created_at}).
+          <br><em style="font-size:11px;">Reloading data…</em>`;
+        statusBar.style.display = 'block';
+        statusBar.style.background = 'rgba(34,197,94,0.08)';
+        statusBar.style.borderColor = 'rgba(34,197,94,0.35)';
+        statusBar.style.color = '#22c55e';
+      }
+      // Reload the ledger after a brief pause so the user can read the message
+      setTimeout(() => loadHistoryLog(), 2000);
+    } else {
+      const errMsg = data.detail || JSON.stringify(data);
+      if (statusBar) {
+        statusBar.innerHTML = `❌ <strong>Rollback failed:</strong> ${errMsg}`;
+        statusBar.style.display = 'block';
+        statusBar.style.background = 'rgba(239,68,68,0.08)';
+        statusBar.style.borderColor = 'rgba(239,68,68,0.35)';
+        statusBar.style.color = '#ef4444';
+      }
+    }
+  } catch (err) {
+    closeRollbackModal();
+    const statusBar = document.getElementById('snapshot-status-bar');
+    if (statusBar) {
+      statusBar.innerHTML = `❌ <strong>Network error:</strong> ${err.message}`;
+      statusBar.style.display = 'block';
+      statusBar.style.background = 'rgba(239,68,68,0.08)';
+      statusBar.style.borderColor = 'rgba(239,68,68,0.35)';
+      statusBar.style.color = '#ef4444';
+    }
+  } finally {
+    if (confirmBtn) { confirmBtn.textContent = '⏪ Yes, Rollback Now'; confirmBtn.disabled = false; }
+    if (cancelBtn)  { cancelBtn.disabled = false; }
+  }
+}
+
+/**
+ * Creates a manual on-demand snapshot via the API.
+ * Shows success/failure in the snapshot-status-bar.
+ */
+async function createManualSnapshot() {
+  const btn       = document.getElementById('btn-create-snapshot');
+  const statusBar = document.getElementById('snapshot-status-bar');
+
+  if (btn) { btn.textContent = '⏳ Creating…'; btn.disabled = true; }
+
+  try {
+    const resp = await fetch('http://localhost:8000/api/system/create-snapshot', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ label: 'manual' })
+    });
+    const data = await resp.json();
+
+    if (resp.ok && data.status === 'ok') {
+      if (statusBar) {
+        statusBar.innerHTML = `
+          💾 <strong>Snapshot created:</strong>
+          <span style="font-family:var(--font-mono);">${data.snapshot}</span>
+          (${(data.size_kb || 0).toLocaleString()} KB)`;
+        statusBar.style.display = 'block';
+        statusBar.style.background = 'rgba(34,197,94,0.08)';
+        statusBar.style.borderColor = 'rgba(34,197,94,0.35)';
+        statusBar.style.color = '#22c55e';
+      }
+    } else {
+      const errMsg = data.detail || JSON.stringify(data);
+      if (statusBar) {
+        statusBar.innerHTML = `❌ <strong>Snapshot failed:</strong> ${errMsg}`;
+        statusBar.style.display = 'block';
+        statusBar.style.background = 'rgba(239,68,68,0.08)';
+        statusBar.style.borderColor = 'rgba(239,68,68,0.35)';
+        statusBar.style.color = '#ef4444';
+      }
+    }
+  } catch (err) {
+    if (statusBar) {
+      statusBar.innerHTML = `❌ <strong>Network error:</strong> ${err.message}`;
+      statusBar.style.display = 'block';
+      statusBar.style.background = 'rgba(239,68,68,0.08)';
+      statusBar.style.borderColor = 'rgba(239,68,68,0.35)';
+      statusBar.style.color = '#ef4444';
+    }
+  } finally {
+    if (btn) { btn.textContent = '💾 Create Snapshot Now'; btn.disabled = false; }
+  }
+}
+
+// Close rollback modal with Escape key (alongside existing export modal)
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeRollbackModal(); }
+});
+
+// Trigger comprehensive database refresh and spreadsheet reconstruction
+async function triggerSpreadsheetRebuild() {
+  // Create beautiful full-screen loading spinner
+  const overlay = document.createElement('div');
+  overlay.id = 'rebuild-loading-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(20, 18, 16, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-family: inherit;
+  `;
+  
+  overlay.innerHTML = `
+    <div class="custom-spinner" style="width: 60px; height: 60px; border: 5px solid rgba(255,255,255,0.1); border-top: 5px solid var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+    <h3 style="font-family: var(--font-display); margin-bottom: 8px; font-size: 20px;">System Refresh Active</h3>
+    <p class="muted" style="font-size: 14px; max-width: 400px; text-align: center; line-height: 1.5; color: rgba(255,255,255,0.7);">
+      Isolating existing files, scanning complete SQLite ledger tables, and reconstructing master Excel book chronologically...
+    </p>
+  `;
+  document.body.appendChild(overlay);
+  
+  try {
+    const response = await fetch("http://localhost:8000/api/rebuild-master-excel", {
+      method: "POST"
+    });
+    
+    // Remove spinner
+    overlay.remove();
+    
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.detail || "Spreadsheet rebuild failed.");
+    }
+    
+    const result = await response.json();
+    console.log("Spreadsheet rebuild successful:", result);
+    
+    // Show beautiful success banner
+    showRebuildToast("✓ Rebuild Successful! Master spreadsheet refreshed at pump_exports/Pump_Accounts.xlsx", "success");
+    
+    // Collapse tray on success
+    const tray = document.getElementById('settings-tray');
+    if (tray) tray.style.display = 'none';
+    
+  } catch (error) {
+    console.error("Rebuild error:", error);
+    overlay.remove();
+    showRebuildToast("❌ Rebuild Failed: " + error.message, "error");
+  }
+}
+
+// Show clean, premium self-removing toast alerts
+function showRebuildToast(message, type) {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    padding: 16px 24px;
+    border-radius: var(--r-md);
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 10000;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    max-width: 450px;
+    line-height: 1.4;
+    animation: slideIn 0.3s ease-out;
+  `;
+  
+  if (type === 'success') {
+    toast.style.background = 'var(--ok-bg)';
+    toast.style.color = 'var(--ok)';
+    toast.style.border = '1px solid rgba(0, 200, 100, 0.2)';
+  } else {
+    toast.style.background = 'rgba(255, 69, 58, 0.15)';
+    toast.style.color = '#ff453a';
+    toast.style.border = '1px solid rgba(255, 69, 58, 0.3)';
+  }
+  
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  // Slide in CSS
+  if (!document.getElementById('rebuild-toast-animation-style')) {
+    const toastStyle = document.createElement('style');
+    toastStyle.id = 'rebuild-toast-animation-style';
+    toastStyle.textContent = `
+      @keyframes slideIn {
+        from { transform: translateY(-20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(toastStyle);
+  }
+  
+  setTimeout(() => {
+    toast.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-10px)';
+    setTimeout(() => toast.remove(), 500);
+  }, 4500);
+}
+
+window.addEventListener('DOMContentLoaded', loadHistoryLog);
+
+// ============================================================
+// Bank Statement Cross-Referencing Engine — Frontend Logic
+// ============================================================
+
+const API = 'http://localhost:8000';
+
+// ── Render the discrepancy alert panel ──────────────────────
+async function loadBankDiscrepancyPanel() {
+  const container = document.getElementById('bank-discrepancy-panel-container');
+  if (!container) return;
+
+  try {
+    const [summaryRes, unsettledRes] = await Promise.all([
+      fetch(`${API}/api/bank-statement/summary`),
+      fetch(`${API}/api/bank-statement/unsettled?limit=10`),
+    ]);
+
+    const summary  = summaryRes.ok  ? await summaryRes.json()  : null;
+    const unsettledData = unsettledRes.ok ? await unsettledRes.json() : null;
+
+    const unsettledCount  = summary?.unsettled ?? 0;
+    const unsettledAmount = summary?.unsettled_amount ?? 0;
+    const settledCount    = summary?.settled ?? 0;
+    const settledAmount   = summary?.settled_amount ?? 0;
+    const totalCount      = summary?.total ?? 0;
+    const entries         = unsettledData?.entries ?? [];
+
+    const hasIssues = unsettledCount > 0;
+
+    let missingRowsHTML = '';
+    if (hasIssues && entries.length > 0) {
+      missingRowsHTML = `
+        <table class="missing-entries-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Transaction Source</th>
+              <th style="text-align:right;">Diary Amount</th>
+              <th style="text-align:right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${entries.map(e => `
+              <tr>
+                <td style="font-family:var(--font-mono); font-weight:600; color:var(--accent);">${e.diary_date}</td>
+                <td style="color:var(--ink-soft);">${e.source_label}</td>
+                <td class="amount-col">₹${Number(e.diary_amount).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+                <td style="text-align:right;">
+                  <button onclick="triggerBankReconcile('${e.diary_date}')"
+                    style="font-size:10.5px; padding:3px 8px; border-radius:var(--r-sm);
+                           background:rgba(255,140,0,0.1); border:1px solid rgba(255,140,0,0.3);
+                           color:#ff8c00; cursor:pointer; font-weight:700;">
+                    Re-check
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ${unsettledCount > 10 ? `<p style="font-size:11.5px; color:var(--ink-soft); margin:8px 0 0 0;">+ ${unsettledCount - 10} more unsettled entries…</p>` : ''}
+      `;
+    }
+
+    container.innerHTML = `
+      <div class="bank-discrepancy-panel ${hasIssues ? '' : 'no-issues'}" id="bank-discrepancy-panel">
+        <div class="discrepancy-header">
+          <div class="discrepancy-title ${hasIssues ? '' : 'ok'}">
+            ${hasIssues ? '⚠️' : '✓'}
+            Digital Collections Bank Settlement
+            ${hasIssues
+              ? `<span style="background:rgba(255,69,58,0.15); color:#ff453a; border:1px solid rgba(255,69,58,0.3); padding:2px 8px; border-radius:999px; font-size:11px;">${unsettledCount} MISSING</span>`
+              : `<span style="background:rgba(0,200,100,0.1); color:#00c864; border:1px solid rgba(0,200,100,0.2); padding:2px 8px; border-radius:999px; font-size:11px;">All Clear</span>`
+            }
+          </div>
+          <button class="bank-upload-btn" onclick="openBankUploadModal()">
+            🏦 Upload Bank Statement
+          </button>
+        </div>
+
+        <div class="discrepancy-kpi-row">
+          <div class="discrepancy-kpi">
+            <label>Checked Entries</label>
+            <strong>${totalCount}</strong>
+          </div>
+          <div class="discrepancy-kpi">
+            <label>Settled in Bank</label>
+            <strong class="ok">${settledCount}</strong>
+          </div>
+          <div class="discrepancy-kpi">
+            <label>Missing / Not Found</label>
+            <strong class="${hasIssues ? 'danger' : 'ok'}">${unsettledCount}</strong>
+          </div>
+          <div class="discrepancy-kpi">
+            <label>Settled Amount</label>
+            <strong>₹${settledAmount.toLocaleString('en-IN',{minimumFractionDigits:2})}</strong>
+          </div>
+          <div class="discrepancy-kpi">
+            <label>Missing Amount</label>
+            <strong class="${hasIssues ? 'danger' : 'ok'}">₹${unsettledAmount.toLocaleString('en-IN',{minimumFractionDigits:2})}</strong>
+          </div>
+        </div>
+
+        ${hasIssues
+          ? `<div style="border-top:1px solid rgba(255,140,0,0.15); padding-top:10px; margin-top:2px;">
+               <div style="font-size:11.5px; font-weight:700; color:#ff8c00; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.3px;">
+                 📋 Digital diary entries with no matching bank credit:
+               </div>
+               ${missingRowsHTML}
+             </div>`
+          : (totalCount === 0
+              ? `<p style="font-size:12.5px; color:var(--ink-soft); margin:0;">
+                   No bank statement loaded yet. Upload your monthly PDF statement to start cross-referencing.
+                 </p>`
+              : `<p style="font-size:12.5px; color:#00c864; margin:0;">
+                   ✓ All ${settledCount} digital diary entries have matching credits in your bank statement.
+                 </p>`)
+        }
+      </div>
+    `;
+  } catch (err) {
+    // Silently fail — backend may not be running
+    console.warn('Bank discrepancy panel unavailable:', err.message);
+    container.innerHTML = '';
+  }
+}
+
+// ── Trigger reconciliation for a specific date ───────────────
+async function triggerBankReconcile(date) {
+  if (!date) return;
+  showRebuildToast(`🔄 Running bank reconciliation for ${date}...`, 'success');
+  try {
+    const res = await fetch(`${API}/api/bank-statement/reconcile?date=${date}`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Reconciliation failed');
+
+    const msg = data.unsettled_count > 0
+      ? `⚠️ ${date}: ${data.unsettled_count} unsettled (₹${data.total_unsettled_amount?.toLocaleString('en-IN')} missing)`
+      : `✓ ${date}: All ${data.settled_count} digital entries settled in bank`;
+    showRebuildToast(msg, data.unsettled_count > 0 ? 'error' : 'success');
+
+    // Reload the panel after reconciliation
+    await loadBankDiscrepancyPanel();
+  } catch (err) {
+    showRebuildToast('Reconciliation error: ' + err.message, 'error');
+  }
+}
+
+// ── Bank Upload Modal Logic ──────────────────────────────────
+let selectedBankFile = null;
+
+function openBankUploadModal() {
+  selectedBankFile = null;
+  document.getElementById('bank-file-name').textContent = 'No file selected — PDF only';
+  document.getElementById('bank-upload-status').style.display = 'none';
+  document.getElementById('bank-upload-modal').style.display = 'flex';
+}
+
+function closeBankUploadModal() {
+  document.getElementById('bank-upload-modal').style.display = 'none';
+  selectedBankFile = null;
+}
+
+function onBankFileSelected(input) {
+  if (input.files && input.files[0]) {
+    selectedBankFile = input.files[0];
+    document.getElementById('bank-file-name').textContent = `📄 ${selectedBankFile.name} (${(selectedBankFile.size / 1024).toFixed(1)} KB)`;
+  }
+}
+
+function handleBankFileDrop(event) {
+  event.preventDefault();
+  document.getElementById('bank-drop-zone').classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file && file.name.toLowerCase().endsWith('.pdf')) {
+    selectedBankFile = file;
+    document.getElementById('bank-file-name').textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+  } else {
+    showRebuildToast('Only PDF files are accepted.', 'error');
+  }
+}
+
+async function submitBankStatementUpload() {
+  if (!selectedBankFile) {
+    showRebuildToast('Please select a PDF bank statement file first.', 'error');
+    return;
+  }
+
+  const bankName = document.getElementById('bank-name-select').value || 'generic';
+  const btn = document.getElementById('bank-upload-submit-btn');
+  const statusDiv = document.getElementById('bank-upload-status');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Uploading & Parsing…';
+  statusDiv.style.display = 'block';
+  statusDiv.style.color = 'var(--ink-soft)';
+  statusDiv.textContent = 'Sending PDF to backend for PyMuPDF parsing…';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', selectedBankFile);
+
+    const res = await fetch(`${API}/api/bank-statement/upload?bank_name=${encodeURIComponent(bankName)}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+
+    statusDiv.style.color = '#00c864';
+    statusDiv.textContent = `✓ ${data.rows_parsed} rows parsed, ${data.rows_inserted} inserted into database.`;
+
+    showRebuildToast(
+      `✓ Bank statement parsed: ${data.rows_inserted} credit rows stored from ${selectedBankFile.name}`,
+      'success'
+    );
+
+    // Reload the discrepancy panel
+    setTimeout(async () => {
+      closeBankUploadModal();
+      await loadBankDiscrepancyPanel();
+    }, 1200);
+  } catch (err) {
+    statusDiv.style.color = '#ff453a';
+    statusDiv.textContent = '❌ Upload failed: ' + err.message;
+    showRebuildToast('Bank upload failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📤 Upload & Parse';
+  }
+}
+
+// Close bank upload modal with Escape
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeBankUploadModal();
+    closeFleetUploadModal();
+  }
+});
+
+// ============================================================
+// Corporate Fleet Cards Reconciliation — Frontend Logic
+// ============================================================
+
+let selectedFleetFile = null;
+
+function openFleetUploadModal() {
+  selectedFleetFile = null;
+  document.getElementById('fleet-file-name').textContent = 'No file selected — CSV only';
+  document.getElementById('fleet-upload-status').style.display = 'none';
+  document.getElementById('fleet-upload-modal').style.display = 'flex';
+}
+
+function closeFleetUploadModal() {
+  document.getElementById('fleet-upload-modal').style.display = 'none';
+  selectedFleetFile = null;
+}
+
+function onFleetFileSelected(input) {
+  if (input.files && input.files[0]) {
+    selectedFleetFile = input.files[0];
+    document.getElementById('fleet-file-name').textContent = `📄 ${selectedFleetFile.name} (${(selectedFleetFile.size / 1024).toFixed(1)} KB)`;
+  }
+}
+
+function handleFleetFileDrop(event) {
+  event.preventDefault();
+  document.getElementById('fleet-drop-zone').classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file && file.name.toLowerCase().endsWith('.csv')) {
+    selectedFleetFile = file;
+    document.getElementById('fleet-file-name').textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+  } else {
+    showRebuildToast('Only CSV files are accepted.', 'error');
+  }
+}
+
+async function submitFleetStatementUpload() {
+  if (!selectedFleetFile) {
+    showRebuildToast('Please select a CSV statement file first.', 'error');
+    return;
+  }
+
+  const provider = document.getElementById('fleet-provider-select').value || 'IOCL';
+  const btn = document.getElementById('fleet-upload-submit-btn');
+  const statusDiv = document.getElementById('fleet-upload-status');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Uploading & Parsing…';
+  statusDiv.style.display = 'block';
+  statusDiv.style.color = 'var(--ink-soft)';
+  statusDiv.textContent = 'Sending CSV to backend for parsing…';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', selectedFleetFile);
+
+    const res = await fetch(`${API}/api/fleet/import?provider=${encodeURIComponent(provider)}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+
+    statusDiv.style.color = '#00c864';
+    statusDiv.textContent = `✓ ${data.rows_imported} records imported successfully.`;
+
+    showRebuildToast(
+      `✓ Fleet portal statement parsed: ${data.rows_imported} rows stored from ${selectedFleetFile.name}`,
+      'success'
+    );
+
+    setTimeout(async () => {
+      closeFleetUploadModal();
+      await loadFleetReconciliationPanel();
+    }, 1200);
+  } catch (err) {
+    statusDiv.style.color = '#ff453a';
+    statusDiv.textContent = '❌ Upload failed: ' + err.message;
+    showRebuildToast('Fleet upload failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📤 Upload Statement';
+  }
+}
+
+// ── Fleet Cards Portal Cross-Match Auditor — Frontend Panel ──────
+async function loadFleetReconciliationPanel() {
+  const container = document.getElementById('fleet-reconciliation-container');
+  if (!container) return;
+
+  const dateInput = document.getElementById('fleet-audit-date');
+  const dateStr = dateInput ? dateInput.value : '2026-06-01';
+
+  try {
+    const res = await fetch(`${API}/api/fleet/status?date=${dateStr}`);
+    const data = await res.json();
+    const records = data.records || [];
+
+    let matchedCount = 0;
+    let missingCount = 0;
+    let alertCount = 0;
+    let totalLiters = 0;
+    let totalAmount = 0;
+
+    records.forEach(r => {
+      totalAmount += r.gross_amount;
+      totalLiters += r.liters_drawn;
+      if (r.portal_match_status === 'MATCHED') matchedCount++;
+      else if (r.portal_match_status === 'MISSING_IN_PORTAL') missingCount++;
+      else if (r.portal_match_status === 'UNAUTHORIZED_SWIPE_ALERT') alertCount++;
+    });
+
+    let recordsHTML = '';
+    if (records.length === 0) {
+      recordsHTML = `
+        <div style="padding: 20px; text-align: center; color: var(--ink-soft); font-size: 13px; background: var(--bg-card); border-radius: var(--r-sm); border: 1px dashed var(--border-soft);">
+          No fleet card transactions reconciled for this date. Choose a date, import a portal statement, and click "Run Reconciliation".
+        </div>
+      `;
+    } else {
+      recordsHTML = `
+        <div class="table-wrap" style="max-height: 350px; overflow-y: auto; background: var(--bg-card); border-radius: var(--r-sm); border: 1px solid var(--border-soft);">
+          <table class="t" style="margin: 0; font-size: 12px; width: 100%;">
+            <thead>
+              <tr style="position: sticky; top: 0; background: var(--bg-soft); z-index: 10;">
+                <th>Card Program</th>
+                <th>Vehicle No</th>
+                <th>Slip/Invoice No</th>
+                <th class="num">Liters Drawn</th>
+                <th class="num">Gross Amount</th>
+                <th style="text-align: center;">Portal Match Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              \${records.map(r => {
+                let badgeClass = 'missing';
+                let label = 'Missing in Portal';
+                if (r.portal_match_status === 'MATCHED') {
+                  badgeClass = 'matched';
+                  label = 'Matched';
+                } else if (r.portal_match_status === 'UNAUTHORIZED_SWIPE_ALERT') {
+                  badgeClass = 'unauth';
+                  label = 'Unauthorized Swipe Alert';
+                }
+                return `
+                  <tr>
+                    <td><strong>\${r.card_program_name}</strong></td>
+                    <td class="mono">\${r.vehicle_no}</td>
+                    <td class="mono" style="color: var(--accent);">\${r.slip_no_or_invoice}</td>
+                    <td class="num">\${fmt.num(r.liters_drawn, 2)} L</td>
+                    <td class="num font-mono" style="font-weight: 700;">₹\${fmt.num(r.gross_amount, 2)}</td>
+                    <td style="text-align: center;">
+                      <span class="status-badge \${badgeClass}" style="font-size: 10.5px; padding: 2px 8px;">
+                        \${label}
+                      </span>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    container.innerHTML = `
+      <div style="background: var(--bg-sunken); border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <h4 style="margin: 0; font-family: var(--font-display); font-size: 14px; color: var(--accent); display: inline-flex; align-items: center; gap: 8px;">
+            <span>💳 Corporate Fleet Cards Cross-Match Auditor</span>
+          </h4>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label style="font-size: 12px; font-weight: 700; color: var(--ink-soft);">Target Date:</label>
+              <input type="date" id="fleet-audit-date" class="input" style="width: auto; max-width: 140px; padding: 4px 8px; font-size: 12px; height: 30px; background: var(--bg-card); border-color: var(--border-soft);" value="\${dateStr}" onchange="loadFleetReconciliationPanel()">
+            </div>
+            <button class="btn btn-ghost" onclick="openFleetUploadModal()" style="padding: 4px 10px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border-soft); background: var(--bg-card);">
+              <span>📤 Upload Portal CSV</span>
+            </button>
+            <button class="btn btn-primary" onclick="triggerFleetReconcile()" style="padding: 4px 12px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; background: var(--accent); border-color: var(--accent); color: #000;">
+              <span>⚡ Run Reconciliation</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="discrepancy-kpi-row" style="margin-bottom: 16px;">
+          <div class="discrepancy-kpi">
+            <label>Billed Credit entries</label>
+            <strong>\${records.length}</strong>
+          </div>
+          <div class="discrepancy-kpi">
+            <label>Matched in Portal</label>
+            <strong class="ok">\${matchedCount}</strong>
+          </div>
+          <div class="discrepancy-kpi">
+            <label>Unauthorized Swipes</label>
+            <strong class="\${alertCount > 0 ? 'danger' : 'ok'}">\${alertCount}</strong>
+          </div>
+          <div class="discrepancy-kpi">
+            <label>Missing in Portal</label>
+            <strong class="\${missingCount > 0 ? 'danger' : 'ok'}" style="\${missingCount > 0 ? 'color: #ff8c00;' : ''}">\${missingCount}</strong>
+          </div>
+          <div class="discrepancy-kpi">
+            <label>Total Billed Amount</label>
+            <strong>₹\${fmt.num(totalAmount, 2)}</strong>
+          </div>
+        </div>
+
+        \${recordsHTML}
+      </div>
+    `;
+  } catch (err) {
+    console.error("Fleet status load error:", err);
+  }
+}
+
+async function triggerFleetReconcile() {
+  const dateInput = document.getElementById('fleet-audit-date');
+  const date = dateInput ? dateInput.value : '2026-06-01';
+  if (!date) return;
+
+  showRebuildToast(\`🔄 Running fleet reconciliation for \${date}...\`, 'success');
+
+  try {
+    const res = await fetch(\`\${API}/api/fleet/reconcile?date=\${date}\`, {
+      method: 'POST',
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Reconciliation failed');
+
+    const msg = data.results.missing_in_portal > 0 || data.results.unauthorized_swipe > 0
+      ? \`⚠️ \${date}: Reconciled. \${data.results.matched} Matched, \${data.results.missing_in_portal} Missing in Portal, \${data.results.unauthorized_swipe} Unauthorized Swipes!\`
+      : \`✓ \${date}: Successfully reconciled all \${data.total_analyzed} transactions!\`;
+
+    showRebuildToast(msg, (data.results.missing_in_portal > 0 || data.results.unauthorized_swipe > 0) ? 'error' : 'success');
+
+    // Reload the panel after reconciliation
+    await loadFleetReconciliationPanel();
+  } catch (err) {
+    showRebuildToast('Fleet reconciliation error: ' + err.message, 'error');
+  }
+}
+
+// ── Operations Analytics Dashboard Toggles & Triggers ──
+let isAnalyticsExpanded = localStorage.getItem('pumpai_analytics_expanded') === 'true';
+
+function renderAnalyticsDashboard() {
+  const container = document.getElementById('operations-analytics-container');
+  if (!container) return;
+  
+  if (!isAnalyticsExpanded) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  const timestamp = new Date().getTime();
+  container.innerHTML = `
+    <div style="background: var(--bg-sunken); border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h4 style="margin: 0; font-family: var(--font-display); font-size: 14px; color: var(--accent); display: inline-flex; align-items: center; gap: 8px;">
+          <span>📊 Operations Analytics Dashboard</span>
+        </h4>
+        <button class="btn btn-ghost" onclick="triggerRegenerateAnalytics()" style="padding: 4px 10px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px;" id="refresh-analytics-btn">
+          <span>🔄 Refresh Analytics Charts</span>
+        </button>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+        <div style="background: #121214; border: 1px solid var(--border-soft); border-radius: var(--r-sm); padding: 8px; text-align: center;">
+          <img src="http://localhost:8000/pump_exports/charts/volume_trend.png?t=${timestamp}" style="width: 100%; height: auto; border-radius: var(--r-xs); display: block;" alt="Fuel Volume Sales Trends">
+        </div>
+        <div style="background: #121214; border: 1px solid var(--border-soft); border-radius: var(--r-sm); padding: 8px; text-align: center;">
+          <img src="http://localhost:8000/pump_exports/charts/credit_concentration.png?t=${timestamp}" style="width: 100%; height: auto; border-radius: var(--r-xs); display: block;" alt="Outstanding Credit Concentrations">
+        </div>
+        <div style="background: #121214; border: 1px solid var(--border-soft); border-radius: var(--r-sm); padding: 8px; text-align: center;">
+          <img src="http://localhost:8000/pump_exports/charts/cash_flow_composition.png?t=${timestamp}" style="width: 100%; height: auto; border-radius: var(--r-xs); display: block;" alt="Gross Cash Flow Composition">
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleAnalyticsDashboard() {
+  isAnalyticsExpanded = !isAnalyticsExpanded;
+  localStorage.setItem('pumpai_analytics_expanded', isAnalyticsExpanded);
+  renderAnalyticsDashboard();
+}
+
+async function triggerRegenerateAnalytics() {
+  const btn = document.getElementById('refresh-analytics-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '🔄 Generating...';
+  }
+  
+  try {
+    const response = await fetch("http://localhost:8000/api/analytics/regenerate", {
+      method: "POST"
+    });
+    if (!response.ok) throw new Error("HTTP error " + response.status);
+    
+    showRebuildToast('✓ Matplotlib static charts regenerated successfully', 'success');
+    renderAnalyticsDashboard();
+  } catch (err) {
+    console.error("Failed to regenerate analytics charts:", err);
+    showRebuildToast('Failed to regenerate charts: ' + err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>🔄 Refresh Analytics Charts</span>';
+    }
+  }
+}
+
+// ── Credit Payments Realizations Log and Manual Modal ──
+async function renderCreditRealizationsLog() {
+  const container = document.getElementById('credit-realizations-container');
+  if (!container) return;
+
+  try {
+    const response = await fetch("http://localhost:8000/api/credit-realizations");
+    if (!response.ok) throw new Error("HTTP error " + response.status);
+    const data = await response.json();
+    const list = data.realizations || [];
+
+    let html = `
+      <div style="background: var(--bg-sunken); border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h4 style="margin: 0; font-family: var(--font-display); font-size: 14px; color: var(--accent); display: inline-flex; align-items: center; gap: 8px;">
+            <span>💰 Credit Payments Realized Log (Debt Collection)</span>
+          </h4>
+          <button class="btn btn-primary" onclick="openCreditRealizationModal()" style="padding: 4px 10px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px;">
+            <span>➕ Record Received Payment</span>
+          </button>
+        </div>
+    `;
+
+    if (list.length === 0) {
+      html += `
+        <div style="padding: 20px; text-align: center; color: var(--ink-soft); font-size: 13px; background: var(--bg-card); border-radius: var(--r-sm); border: 1px dashed var(--border-soft);">
+          No customer debt collection payments logged yet.
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="table-wrap" style="max-height: 220px; overflow-y: auto; background: var(--bg-card); border-radius: var(--r-sm); border: 1px solid var(--border-soft);">
+          <table class="t" style="margin: 0; font-size: 12px; width: 100%;">
+            <thead>
+              <tr style="position: sticky; top: 0; background: var(--bg-soft); z-index: 10;">
+                <th>Date</th>
+                <th>Customer / Account Head</th>
+                <th class="num">Amount Received</th>
+                <th>Mode</th>
+                <th>Remarks / UTR</th>
+                <th>Invoice Ref</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map(r => `
+                <tr>
+                  <td><strong>${r.date}</strong></td>
+                  <td><span class="badge" style="background: rgba(31, 73, 125, 0.1); color: var(--accent);">${r.party_name}</span></td>
+                  <td class="num" style="color: var(--ok); font-weight: bold;">₹${Number(r.amount_received).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                  <td><span class="badge ${r.payment_mode === 'CASH' ? 'ok' : 'info'}" style="font-size: 10px; padding: 2px 6px;">${r.payment_mode}</span></td>
+                  <td style="color: var(--ink-soft);">${r.bank_utr_or_remarks || '-'}</td>
+                  <td style="font-family: var(--font-mono); color: var(--ink-soft);">${r.linked_invoice_no ? '#' + r.linked_invoice_no : '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+
+  } catch (err) {
+    console.error("Failed to load credit realizations:", err);
+    container.innerHTML = `
+      <div class="alert bad">Failed to load realizations log: ${err.message}</div>
+    `;
+  }
+}
+
+// ── Credit Ledger Aging & Risk Evaluation Panel ──
+async function renderCreditAgingPanel() {
+  const container = document.getElementById('credit-aging-container');
+  if (!container) return;
+
+  try {
+    const response = await fetch("http://localhost:8000/api/aging/summary");
+    if (!response.ok) throw new Error("HTTP error " + response.status);
+    const data = await response.json();
+    const list = data.summary || [];
+
+    let html = `
+      <div style="background: var(--bg-sunken); border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <h4 style="margin: 0; font-family: var(--font-display); font-size: 14px; color: var(--accent); display: inline-flex; align-items: center; gap: 8px;">
+            <span>📈 Credit Ledger Aging & Risk Evaluation Engine</span>
+          </h4>
+          <button class="btn btn-ghost" onclick="window.open('http://localhost:8000/api/aging/export-pdf', '_blank')" style="padding: 4px 12px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border-soft); background: var(--bg-card);">
+            <span>📥 Export Aging PDF Statement</span>
+          </button>
+        </div>
+    `;
+
+    if (list.length === 0) {
+      html += `
+        <div style="padding: 20px; text-align: center; color: var(--ink-soft); font-size: 13px; background: var(--bg-card); border-radius: var(--r-sm); border: 1px dashed var(--border-soft);">
+          No active customer credit outstanding to analyze.
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="table-wrap" style="max-height: 350px; overflow-y: auto; background: var(--bg-card); border-radius: var(--r-sm); border: 1px solid var(--border-soft);">
+          <table class="t" style="margin: 0; font-size: 12px; width: 100%;">
+            <thead>
+              <tr style="position: sticky; top: 0; background: var(--bg-soft); z-index: 10;">
+                <th>Customer / Account Head</th>
+                <th class="num">Current (0-15d)</th>
+                <th class="num">Growing (16-30d)</th>
+                <th class="num">Delinquent (31-60d)</th>
+                <th class="num">Critical (>60d)</th>
+                <th class="num">Total Outstanding</th>
+                <th style="text-align: center;">Risk Score</th>
+                <th style="text-align: center;">Collection Alert</th>
+                <th style="text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map(c => {
+                const total = c.total_outstanding;
+                const current = c.buckets.current;
+                const growing = c.buckets.growing;
+                const delinquent = c.buckets.delinquent;
+                const critical = c.buckets.critical;
+                const riskScore = c.risk_coefficient_pct;
+                const overdue = c.collection_required_alert;
+                
+                // Color mapping for risk scores
+                let riskBg = 'rgba(24, 160, 89, 0.1)';
+                let riskColor = 'var(--ok)';
+                if (riskScore > 50) {
+                  riskBg = 'rgba(218, 54, 54, 0.1)';
+                  riskColor = 'var(--bad)';
+                } else if (riskScore > 20) {
+                  riskBg = 'rgba(235, 150, 24, 0.1)';
+                  riskColor = 'var(--warn)';
+                }
+
+                // Alert tag styling
+                const alertTag = overdue
+                  ? `<span class="badge bad" style="font-size: 10px; padding: 4px 8px; font-weight: bold; background: var(--bad); color: var(--bg-card); display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">⚠️ Overdue Accounts Collection Required</span>`
+                  : `<span class="badge ok" style="font-size: 10px; padding: 4px 8px; background: rgba(24, 160, 89, 0.1); color: var(--ok); font-weight: 500;">Healthy Account</span>`;
+
+                return `
+                  <tr>
+                    <td><strong>${c.party_name}</strong></td>
+                    <td class="num mono">${current > 0 ? '₹' + current.toLocaleString('en-IN', {minimumFractionDigits: 2}) : '—'}</td>
+                    <td class="num mono muted">${growing > 0 ? '₹' + growing.toLocaleString('en-IN', {minimumFractionDigits: 2}) : '—'}</td>
+                    <td class="num mono muted">${delinquent > 0 ? '₹' + delinquent.toLocaleString('en-IN', {minimumFractionDigits: 2}) : '—'}</td>
+                    <td class="num mono" style="color: var(--bad); font-weight: ${critical > 0 ? 'bold' : 'normal'};">${critical > 0 ? '₹' + critical.toLocaleString('en-IN', {minimumFractionDigits: 2}) : '—'}</td>
+                    <td class="num mono" style="font-weight: bold; color: var(--accent);">₹${total.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                    <td style="text-align: center;">
+                      <div style="display: inline-flex; flex-direction: column; align-items: center; gap: 3px;">
+                        <span style="font-size: 11px; font-weight: bold; background: ${riskBg}; color: ${riskColor}; padding: 2px 6px; border-radius: 4px; display: inline-block;">${riskScore.toFixed(1)}%</span>
+                        <div style="width: 50px; height: 4px; background: var(--bg-soft); border-radius: 2px; overflow: hidden; display: inline-block;">
+                          <div style="width: ${riskScore}%; height: 100%; background: ${riskColor};"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="text-align: center; vertical-align: middle;">
+                      ${alertTag}
+                    </td>
+                    <td style="text-align: center; vertical-align: middle;">
+                      <button class="btn btn-sm btn-ghost" onclick="copyWhatsAppReminder('${c.party_name.replace(/'/g, "\\'")}')" style="font-size: 11px; padding: 2px 6px; height: auto;" title="Copy WhatsApp Outstanding Reminder">
+                        💬 Copy Nudge
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+
+  } catch (err) {
+    console.error("Failed to load credit aging summary:", err);
+    container.innerHTML = `
+      <div class="alert bad" style="padding: 16px;">
+        <strong>⚠️ Credit Aging Panel Offline</strong><br>
+        <span style="font-size: 12px;">Failed to load credit aging summary: ${err.message}. Ensure backend is active.</span>
+      </div>
+    `;
+  }
+}
+
+// Modal handling
+function openCreditRealizationModal() {
+  // Create modal container if not exists
+  let modal = document.getElementById('credit-realization-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'credit-realization-modal';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.background = 'rgba(0,0,0,0.5)';
+    modal.style.backdropFilter = 'blur(4px)';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = '1000';
+    
+    modal.innerHTML = `
+      <div style="background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: var(--r-md); width: 100%; max-width: 440px; padding: 20px; box-shadow: var(--shadow-lg);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h3 style="margin: 0; font-size: 16px; font-family: var(--font-display); color: var(--accent);">💰 Record Received Payment</h3>
+          <button onclick="closeCreditRealizationModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--ink-soft);">&times;</button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="field">
+            <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Payment Date</label>
+            <input type="date" id="cr-date" class="input" value="${new Date().toISOString().slice(0, 10)}">
+          </div>
+          <div class="field">
+            <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Customer Name / Account Head</label>
+            <input type="text" id="cr-party" class="input" placeholder="e.g. Gopalram Ji Dhaba">
+          </div>
+          <div class="field">
+            <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Amount Received (₹)</label>
+            <input type="number" id="cr-amount" class="input" placeholder="0.00" step="0.01">
+          </div>
+          <div class="field">
+            <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Payment Mode</label>
+            <select id="cr-mode" class="input" style="height: 38px;">
+              <option value="CASH">CASH</option>
+              <option value="BANK_TRANSFER">BANK TRANSFER</option>
+              <option value="UPI">UPI / Paytm</option>
+            </select>
+          </div>
+          <div class="field">
+            <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Bank UTR / Remarks</label>
+            <input type="text" id="cr-remarks" class="input" placeholder="e.g. balance clear, SBI 12345">
+          </div>
+          <div class="field">
+            <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Linked Invoice Number (Optional)</label>
+            <input type="text" id="cr-invoice" class="input" placeholder="e.g. 1045">
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end;">
+          <button class="btn btn-ghost" onclick="closeCreditRealizationModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="submitCreditRealization()">Save Payment</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  } else {
+    document.getElementById('cr-date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('cr-party').value = '';
+    document.getElementById('cr-amount').value = '';
+    document.getElementById('cr-mode').value = 'CASH';
+    document.getElementById('cr-remarks').value = '';
+    document.getElementById('cr-invoice').value = '';
+    modal.style.display = 'flex';
+  }
+}
+
+function closeCreditRealizationModal() {
+  const modal = document.getElementById('credit-realization-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function submitCreditRealization() {
+  const date = document.getElementById('cr-date').value;
+  const party = document.getElementById('cr-party').value.trim();
+  const amount = parseFloat(document.getElementById('cr-amount').value);
+  const mode = document.getElementById('cr-mode').value;
+  const remarks = document.getElementById('cr-remarks').value.trim();
+  const invoice = document.getElementById('cr-invoice').value.trim();
+
+  if (!party) {
+    showRebuildToast('Customer name is required', 'error');
+    return;
+  }
+  if (isNaN(amount) || amount <= 0) {
+    showRebuildToast('Valid positive amount is required', 'error');
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:8000/api/credit-realizations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: date,
+        party_name: party,
+        amount_received: amount,
+        payment_mode: mode,
+        bank_utr_or_remarks: remarks,
+        linked_invoice_no: invoice || null
+      })
+    });
+
+    if (!response.ok) throw new Error("HTTP error " + response.status);
+    
+    showRebuildToast('✓ Payment recorded & ledger updated successfully', 'success');
+    closeCreditRealizationModal();
+    renderCreditRealizationsLog();
+    
+    // Refresh history entries to show new ledger balance adjustments instantly
+    if (typeof loadHistoryLog === 'function') loadHistoryLog();
+    
+  } catch (err) {
+    console.error("Failed to submit realization:", err);
+    showRebuildToast('Failed to record payment: ' + err.message, 'error');
+  }
+}
+
+async function copyWhatsAppReminder(customerName) {
+  try {
+    const url = `http://localhost:8000/api/customer/reminder?party_name=${encodeURIComponent(customerName)}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data.status === 'success') {
+      await navigator.clipboard.writeText(data.reminder);
+      if (typeof showRebuildToast === 'function') {
+        showRebuildToast('WhatsApp reminder copied!', 'success');
+      } else {
+        alert('Reminder copied to clipboard!');
+      }
+    } else {
+      throw new Error(data.detail || 'Failed to fetch reminder');
+    }
+  } catch (err) {
+    console.error(err);
+    if (typeof showRebuildToast === 'function') {
+      showRebuildToast('Failed to copy: ' + err.message, 'error');
+    } else {
+      alert('Error: ' + err.message);
+    }
+  }
+}
+
+</script>
+</body>
+</html>

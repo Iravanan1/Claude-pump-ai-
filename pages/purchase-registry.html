@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Purchase Cost Price Registry · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 16px;
+  }
+  @media (max-width: 900px) {
+    .grid-2 {
+      grid-template-columns: 1fr;
+    }
+  }
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .table-wrap {
+    margin-top: 8px;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background: var(--bg-card);
+    overflow: hidden;
+  }
+  .t {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .t th, .t td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .t th {
+    background: var(--bg-sunken);
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  .t tr:last-child td {
+    border-bottom: none;
+  }
+  .t tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .badge-hsd {
+    background: var(--accent-bg);
+    color: var(--accent-ink);
+  }
+  .badge-ms {
+    background: var(--info-bg);
+    color: var(--info);
+  }
+</style>
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+const API_BASE = "http://localhost:8000/api";
+let purchaseRates = [];
+
+async function loadPurchaseRates() {
+  try {
+    const res = await fetch(`${API_BASE}/purchase-rates`);
+    if (!res.ok) throw new Error("Failed to load purchase cost rates from server.");
+    purchaseRates = await res.json();
+    render();
+  } catch (err) {
+    UI.toast(err.message, "bad");
+    render();
+  }
+}
+
+async function savePurchaseRate(e) {
+  e.preventDefault();
+  const form = e.target;
+  const effective_date = form.effective_date.value;
+  const product_type = form.product_type.value;
+  const purchase_rate_per_liter = parseFloat(form.purchase_rate_per_liter.value);
+  const invoice_reference = form.invoice_reference.value.trim();
+
+  if (!effective_date) {
+    UI.toast("Please specify a valid effective date.", "bad");
+    return;
+  }
+  if (isNaN(purchase_rate_per_liter) || purchase_rate_per_liter <= 0) {
+    UI.toast("Purchase rate must be a positive number.", "bad");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/purchase-rates/upsert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        effective_date,
+        product_type,
+        purchase_rate_per_liter,
+        invoice_reference: invoice_reference || null
+      })
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.detail || "Failed to save purchase rate.");
+    }
+    UI.toast(`Purchase rate for ${product_type} saved successfully!`, "ok");
+    resetForm();
+    await loadPurchaseRates();
+  } catch (err) {
+    UI.toast(err.message, "bad");
+  }
+}
+
+async function deletePurchaseRate(effectiveDate, productType) {
+  if (!UI.confirmAction(`Are you sure you want to delete the purchase rate for ${productType} on ${effectiveDate}?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/purchase-rates/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ effective_date: effectiveDate, product_type: productType })
+    });
+    if (!res.ok) throw new Error("Failed to delete purchase rate.");
+    UI.toast(`Purchase rate for ${productType} on ${effectiveDate} removed.`, "ok");
+    await loadPurchaseRates();
+  } catch (err) {
+    UI.toast(err.message, "bad");
+  }
+}
+
+function resetForm() {
+  const form = document.getElementById("purchase-rate-form");
+  form.reset();
+  
+  // Reset date to current local date
+  const today = new Date().toISOString().split('T')[0];
+  form.effective_date.value = today;
+}
+
+function render() {
+  const tableRowsHtml = purchaseRates.length === 0
+    ? `<tr><td colspan="5" style="text-align:center;" class="muted">No purchase rates configured yet. Log one on the left.</td></tr>`
+    : purchaseRates.map(r => {
+        const typeBadgeClass = r.product_type === "HSD" ? "badge-hsd" : "badge-ms";
+        const typeLabel = r.product_type === "HSD" ? "High Speed Diesel (HSD)" : "Motor Spirit (MS / Petrol)";
+        const rateDisplay = `₹${r.purchase_rate_per_liter.toFixed(2)}`;
+        const invoiceDisplay = r.invoice_reference ? r.invoice_reference : '—';
+        return `
+          <tr>
+            <td class="mono">${r.effective_date}</td>
+            <td><span class="badge ${typeBadgeClass}">${typeLabel}</span></td>
+            <td class="mono num">${rateDisplay}</td>
+            <td class="mono">${invoiceDisplay}</td>
+            <td class="right" style="white-space:nowrap;">
+              <button class="btn btn-sm btn-ghost" onclick="deletePurchaseRate('${r.effective_date}', '${r.product_type}')" style="padding: 2px 6px; font-size:11px; color:var(--warn);">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+  // Set default date value
+  const today = new Date().toISOString().split('T')[0];
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Settings',
+      title: 'Log Purchase Invoice Rates',
+      desc: 'Define purchase rate history for HSD and MS fuel deliveries. Reconciliations and margin audit logic pull cost price rates chronologically based on these records.'
+    })}
+
+    <div class="grid grid-2 mt-3">
+      <div class="card">
+        <div class="card-head"><h3>Log Purchase Invoice Rates</h3></div>
+        <form id="purchase-rate-form" onsubmit="savePurchaseRate(event)">
+          <div class="field">
+            <label for="effective_date">Effective Delivery Date</label>
+            <input class="input" type="date" id="effective_date" name="effective_date" required value="${today}">
+          </div>
+          
+          <div class="field">
+            <label for="product_type">Fuel Product Type</label>
+            <select class="select" id="product_type" name="product_type" required>
+              <option value="HSD">High Speed Diesel (HSD)</option>
+              <option value="MS">Motor Spirit / Petrol (MS)</option>
+            </select>
+          </div>
+          
+          <div class="field">
+            <label for="purchase_rate_per_liter">Purchase Rate (₹ / Liter)</label>
+            <input class="input mono" type="number" step="0.01" min="0.01" id="purchase_rate_per_liter" name="purchase_rate_per_liter" required placeholder="e.g. 88.50">
+            <span class="hint">Include base cost, transportation costs, and local tax levies.</span>
+          </div>
+
+          <div class="field">
+            <label for="invoice_reference">Invoice Reference #</label>
+            <input class="input" type="text" id="invoice_reference" name="invoice_reference" placeholder="e.g. INV-2026-0045">
+          </div>
+          
+          <div class="action-buttons">
+            <button class="btn btn-primary" type="submit" style="flex:1;">Save Purchase Rate</button>
+            <button class="btn btn-ghost" type="button" onclick="resetForm()">Reset</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Fuel Purchase Cost History</h3>
+          <span class="badge" style="margin-left:auto;">${purchaseRates.length} logs</span>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead>
+              <tr>
+                <th>Effective Date</th>
+                <th>Fuel Product</th>
+                <th class="num">Purchase CP</th>
+                <th>Invoice Ref</th>
+                <th style="width: 80px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+window.addEventListener("DOMContentLoaded", loadPurchaseRates);
+</script>
+</body>
+</html>

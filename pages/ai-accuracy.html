@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Accuracy · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+function render() {
+  const s = PumpStore.state;
+  const jobs = s.ocrJobs || [];
+
+  // Counts
+  const total = jobs.length;
+  const verified    = jobs.filter(j => j.status === 'verified').length;
+  const needsReview = jobs.filter(j => j.status === 'needs_review').length;
+  const approved    = jobs.filter(j => j.reviewed === 'approved').length;
+  const rejected    = jobs.filter(j => j.reviewed === 'rejected').length;
+
+  // Average per-engine confidence (over all fields)
+  let paddleSum = 0, paddleN = 0, easySum = 0, easyN = 0, consSum = 0, consN = 0;
+  jobs.forEach(j => {
+    (j.engines?.paddle?.fields || []).forEach(f => { paddleSum += f.conf; paddleN++; });
+    (j.engines?.easy?.fields   || []).forEach(f => { easySum   += f.conf; easyN++;   });
+    (j.consensus || []).forEach(f => { consSum += f.conf; consN++; });
+  });
+  const paddleAvg = paddleN ? paddleSum / paddleN : 0;
+  const easyAvg   = easyN   ? easySum   / easyN   : 0;
+  const consAvg   = consN   ? consSum   / consN   : 0;
+
+  // Field-level disagreement frequency
+  const disagreements = {};
+  const fieldLabels = {};
+  jobs.forEach(j => {
+    (j.consensus || []).forEach(f => {
+      fieldLabels[f.key] = f.label;
+      if (f.mismatch) disagreements[f.key] = (disagreements[f.key] || 0) + 1;
+    });
+  });
+  const topMismatch = Object.entries(disagreements)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+
+  // Daily verified vs needs_review (last 14 days)
+  const byDay = {};
+  jobs.forEach(j => {
+    const d = (j.capturedAt || '').slice(0, 10);
+    if (!d) return;
+    if (!byDay[d]) byDay[d] = { verified: 0, needs_review: 0 };
+    byDay[d][j.status] = (byDay[d][j.status] || 0) + 1;
+  });
+  const days = Object.keys(byDay).sort().slice(-14);
+  const maxDay = Math.max(1, ...days.map(d => (byDay[d].verified || 0) + (byDay[d].needs_review || 0)));
+
+  // Confidence buckets across all fields
+  const buckets = { '\u226590%': 0, '75\u201389%': 0, '60\u201374%': 0, '<60%': 0 };
+  jobs.forEach(j => (j.consensus || []).forEach(f => {
+    if      (f.conf >= 0.90) buckets['\u226590%']++;
+    else if (f.conf >= 0.75) buckets['75\u201389%']++;
+    else if (f.conf >= 0.60) buckets['60\u201374%']++;
+    else                     buckets['<60%']++;
+  }));
+  const bucketMax = Math.max(1, ...Object.values(buckets));
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'OCR &amp; AI',
+      title: 'AI Accuracy Dashboard',
+      desc: 'How well the OCR consensus is performing across registers. AI never modifies accounting truth directly \u2014 every entry needs human confirmation.'
+    })}
+
+    ${total === 0 ? UI.emptyState({
+      icon: '\u25c8',
+      title: 'No OCR jobs yet',
+      body: 'Upload your first register image from <b>OCR Upload</b> to start building accuracy data.'
+    }) : `
+
+    <div class="grid grid-4">
+      <div class="kpi">
+        <div class="kpi-label">Total processed</div>
+        <div class="kpi-value">${total}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Auto-verified</div>
+        <div class="kpi-value">${verified}</div>
+        <div class="kpi-sub">${total ? Math.round(verified/total*100) : 0}% of total</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Sent to review</div>
+        <div class="kpi-value">${needsReview}</div>
+        <div class="kpi-sub">${total ? Math.round(needsReview/total*100) : 0}% needed human eyes</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Approved / Rejected</div>
+        <div class="kpi-value">${approved} <span class="muted" style="font-size:16px;">/ ${rejected}</span></div>
+        <div class="kpi-sub">post-review outcomes</div>
+      </div>
+    </div>
+
+    <div class="grid grid-2 mt-3">
+      <div class="card">
+        <div class="card-head"><h3>Engine confidence (average)</h3></div>
+        <div class="engine-row">
+          <div class="engine-label">PaddleOCR</div>
+          <div class="engine-bar"><span style="width:${paddleAvg*100}%; background: var(--accent);"></span></div>
+          <div class="engine-val mono">${(paddleAvg*100).toFixed(1)}%</div>
+        </div>
+        <div class="engine-row">
+          <div class="engine-label">EasyOCR</div>
+          <div class="engine-bar"><span style="width:${easyAvg*100}%; background: var(--accent-2, var(--accent));"></span></div>
+          <div class="engine-val mono">${(easyAvg*100).toFixed(1)}%</div>
+        </div>
+        <div class="engine-row">
+          <div class="engine-label"><b>Consensus</b></div>
+          <div class="engine-bar"><span style="width:${consAvg*100}%; background: var(--ink);"></span></div>
+          <div class="engine-val mono"><b>${(consAvg*100).toFixed(1)}%</b></div>
+        </div>
+        <div class="muted mt-2" style="font-size:13px;">
+          Consensus is a weighted mean of the two engines, with mismatch penalties.
+          Real engines run server-side; this build uses simulated readings.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Confidence distribution</h3></div>
+        ${Object.entries(buckets).map(([label, count]) => `
+          <div class="engine-row">
+            <div class="engine-label mono" style="font-size:13px;">${label}</div>
+            <div class="engine-bar"><span style="width:${count/bucketMax*100}%; background: ${
+              label === '\u226590%' ? 'var(--ok)' :
+              label === '75\u201389%' ? 'var(--accent)' :
+              label === '60\u201374%' ? 'var(--warn, #c89148)' :
+              'var(--bad, #b5563f)'
+            };"></span></div>
+            <div class="engine-val mono">${count}</div>
+          </div>
+        `).join('')}
+        <div class="muted mt-2" style="font-size:13px;">
+          Threshold for human review: <span class="mono">${Math.round((s.settings?.lowConfidenceThreshold || 0.75) * 100)}%</span>.
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-head"><h3>Fields with most engine disagreement</h3></div>
+      ${topMismatch.length === 0
+        ? `<div class="muted" style="padding:12px 0;">No engine mismatches yet. Either accuracy is excellent or sample size is small.</div>`
+        : `<table class="table">
+            <thead><tr><th>Field</th><th class="num">Disagreements</th><th class="num">Rate</th><th></th></tr></thead>
+            <tbody>
+              ${topMismatch.map(([key, n]) => {
+                const rate = total ? (n / total * 100).toFixed(1) : '0.0';
+                return `<tr>
+                  <td>${fieldLabels[key] || key}</td>
+                  <td class="num">${n}</td>
+                  <td class="num">${rate}%</td>
+                  <td><div class="bar-cell"><span style="width:${Math.min(100, n/total*100)}%; background: var(--accent);"></span></div></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`
+      }
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-head"><h3>Daily volume (last ${days.length} days)</h3></div>
+      ${days.length === 0
+        ? `<div class="muted" style="padding:12px 0;">No dated jobs yet.</div>`
+        : `<div class="day-chart">
+            ${days.map(d => {
+              const v = byDay[d].verified || 0;
+              const r = byDay[d].needs_review || 0;
+              const total = v + r;
+              const vH = (v / maxDay * 100);
+              const rH = (r / maxDay * 100);
+              return `<div class="day-col" title="${d}: ${v} verified, ${r} review">
+                <div class="day-bars">
+                  <span class="day-bar review" style="height:${rH}%;"></span>
+                  <span class="day-bar verified" style="height:${vH}%;"></span>
+                </div>
+                <div class="day-label mono">${d.slice(5)}</div>
+                <div class="day-val mono">${total || ''}</div>
+              </div>`;
+            }).join('')}
+          </div>
+          <div class="row" style="gap:16px; margin-top:12px; font-size:13px;">
+            <span><span class="legend-dot" style="background: var(--ok);"></span> Auto-verified</span>
+            <span><span class="legend-dot" style="background: var(--accent);"></span> Sent to review</span>
+          </div>`
+      }
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-head"><h3>How accuracy is measured</h3></div>
+      <ul class="info-list">
+        <li><b>Per-field confidence:</b> each OCR engine reports a 0\u20131 confidence per field.</li>
+        <li><b>Consensus:</b> weighted mean of the two engines; mismatches reduce the confidence score.</li>
+        <li><b>Auto-verify:</b> only when all fields clear the <span class="mono">${Math.round((s.settings?.lowConfidenceThreshold || 0.75) * 100)}%</span> threshold and no engine disagreements remain.</li>
+        <li><b>Human override:</b> any field can be corrected on the Review screen \u2014 the AI never writes to accounting tables on its own.</li>
+      </ul>
+    </div>
+    `}
+  `;
+}
+
+window.addEventListener('DOMContentLoaded', render);
+</script>
+</body>
+</html>

@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Review Queue · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+  /* Zero animations and transition overrides for absolute speed */
+  * {
+    transition: none !important;
+    animation-duration: 0s !important;
+  }
+  
+  .workspace-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: calc(100vh - 120px);
+    gap: 16px;
+    margin-top: 10px;
+  }
+  
+  /* Left Panel - Image Viewport */
+  .image-panel {
+    background: #141210;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-lg);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .register-image {
+    max-width: 100%;
+    max-height: 100%;
+    transform-origin: center;
+    cursor: grab;
+    user-select: none;
+  }
+  .register-image:active {
+    cursor: grabbing;
+  }
+  .image-controls {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(45, 38, 32, 0.9);
+    border-radius: 999px;
+    padding: 6px;
+    display: flex;
+    gap: 4px;
+    z-index: 10;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+  .image-controls button {
+    background: transparent;
+    color: #f5f0e6;
+    border: none;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    border-radius: 999px;
+    font-weight: bold;
+  }
+  .image-controls button:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  
+  /* Right Panel - Keyboard Navigable Form */
+  .form-panel {
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .form-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-sunken);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .form-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .form-section-title {
+    grid-column: span 2;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-top: 14px;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: 4px;
+  }
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .form-field.span-2 {
+    grid-column: span 2;
+  }
+  .form-field label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .form-input {
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    color: var(--ink);
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .form-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: white;
+  }
+  
+  /* Warnings visual indicators */
+  .form-input.warning-field {
+    border: 2px solid orange !important;
+    background: #fffcf5 !important;
+  }
+  
+  .form-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg-sunken);
+    display: flex;
+    gap: 10px;
+  }
+  
+  .badge-counter {
+    background: var(--bad);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-weight: bold;
+    font-size: 13px;
+  }
+  
+  .empty-queue {
+    text-align: center;
+    padding: 80px 24px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-lg);
+    margin-top: 40px;
+  }
+  .empty-icon {
+    font-size: 64px;
+    color: var(--ok);
+    margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/party-ac.js"></script>
+<script>
+// State Management
+let queue = [];
+let activeIndex = 0;
+let zoom = 1.0;
+let panX = 0;
+let panY = 0;
+let isDragging = false;
+let startX, startY;
+let rot = 0;
+
+// Fetch Needs Review entries from Backend
+async function fetchReviewQueue() {
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Review Operations',
+      title: 'Flagged Records Queue',
+      desc: 'Loading discrepant pages from database and human review directories...'
+    })}
+    <div class="card" style="padding: 40px; text-align: center;">
+      <div class="custom-spinner" style="width: 48px; height: 48px; border: 4px solid var(--border-soft); border-top: 4px solid var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px;"></div>
+      <h3 style="font-family: var(--font-display);">Fetching Flagged Sheets...</h3>
+    </div>
+  `;
+  
+  try {
+    const response = await fetch("http://localhost:8000/api/review-queue");
+    if (!response.ok) throw new Error("Failed to load review queue.");
+    queue = await response.json();
+    activeIndex = 0;
+    renderActive();
+  } catch (err) {
+    console.error(err);
+    UI.toast("Error loading queue: " + err.message, "bad");
+  }
+}
+
+function renderActive() {
+  const main = document.getElementById('main');
+  
+  if (queue.length === 0) {
+    main.innerHTML = `
+      ${UI.pageHead({
+        crumb: 'Review Operations',
+        title: 'Flagged Records Queue',
+        desc: 'Review and fix mismatched daily pump sheets.',
+        actions: `<span class="badge ok"><span class="dot"></span>All Systems Verified</span>`
+      })}
+      
+      <div class="empty-queue">
+        <div class="empty-icon">✓</div>
+        <h2 style="font-family: var(--font-display); margin-bottom: 8px;">No Flagged Records Remaining!</h2>
+        <p style="font-size: 15px; color: var(--ink-soft);">All daily register calculations are perfectly balanced and verified.</p>
+      </div>
+    `;
+    return;
+  }
+  
+  const job = queue[activeIndex];
+  
+  // Resolve image source safely
+  let imageSrc = job.raw_data && job.raw_data.image_url ? job.raw_data.image_url : '';
+  if (!imageSrc && job.image_url) imageSrc = job.image_url;
+  if (!imageSrc) imageSrc = 'http://localhost:8000/uploaded_raw_photos/skewed_test_raw.png';
+  
+  main.innerHTML = `
+    ${UI.pageHead({
+      crumb: `Mismatches Queue`,
+      title: `Reviewing: ${job.date}`,
+      desc: `Resolve arithmetic discrepances for operational sheet.`,
+      actions: `
+        <span class="badge-counter">Remaining sheets: ${queue.length}</span>
+      `
+    })}
+    
+    <div class="workspace-container">
+      <!-- LEFT: Zoomable / Pannable Image Viewport -->
+      <div class="image-panel" id="image-panel">
+        <img id="register-img" class="register-image" src="${imageSrc}" alt="Handwritten Register" draggable="false">
+        <div class="image-controls">
+          <button onclick="changeZoom(-0.25)">−</button>
+          <button onclick="resetZoom()">100%</button>
+          <button onclick="changeZoom(0.25)">+</button>
+          <button onclick="rotateImage(-90)">↺</button>
+          <button onclick="rotateImage(90)">↻</button>
+        </div>
+      </div>
+      
+      <!-- RIGHT: Rapid Correction Form -->
+      <div class="form-panel">
+        <div class="form-header">
+          <div>
+            <h3>Correction Fields</h3>
+            <small class="muted">Fix highlighted fields and hit Ctrl+S or Enter</small>
+          </div>
+          <button type="button" class="btn btn-ghost" id="copy-summary-btn" onclick="copyDailySummaryText()" style="padding: 6px 10px; font-size: 12px; height: auto; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border-soft); background: var(--bg-soft); color: var(--ink);">
+            <span>📋</span> Copy Daily Summary text
+          </button>
+        </div>
+        
+        <div class="form-body">
+          <!-- Continuity Interlock Totalizer Alert Banner -->
+          <div class="alert warning" id="interlock-alert-banner" style="background: rgba(245, 158, 11, 0.15); border: 2px solid #f59e0b; color: #d97706; padding: 12px 16px; border-radius: var(--r-md); font-weight: bold; font-size: 13.5px; display: none; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);" onclick="inspectPreviousDaySheet()">
+            <span style="font-size: 18px;">⚠️</span>
+            <span id="interlock-alert-text">Totalizer Discrepancy: ...</span>
+          </div>
+          
+          <form id="ledger-form" onsubmit="event.preventDefault(); triggerSave();">
+            <div class="form-grid">
+              
+              <div class="form-section-title">1 · General metadata</div>
+              <div class="form-field">
+                <label for="f-date">Operations Date</label>
+                <input class="form-input" type="date" id="f-date" data-key="date" tabindex="1" required>
+              </div>
+              <div class="form-field">
+                <label for="f-shift">Shift Name</label>
+                <input class="form-input" type="text" id="f-shift" data-key="shift" tabindex="2" placeholder="e.g. Morning">
+              </div>
+              <div class="form-field" style="display: flex; align-items: center; gap: 8px; align-self: center; margin-top: 12px;">
+                <input type="checkbox" id="f-meter-replaced" tabindex="2" style="width: 18px; height: 18px; margin: 0; cursor: pointer; accent-color: var(--accent);">
+                <label for="f-meter-replaced" style="margin: 0; cursor: pointer; font-weight: 500; user-select: none;">Meter Replaced</label>
+              </div>
+              <div class="form-field">
+                <label for="f-replacement-offset">Replacement Offset (Liters)</label>
+                <input class="form-input" type="number" step="0.01" id="f-replacement-offset" tabindex="2" placeholder="e.g. 150.25">
+              </div>
+              
+              <div class="form-section-title">2 · MS-1 (Petrol Nozzle 1)</div>
+              <div class="form-field">
+                <label for="f-n1_open">Opening Meter</label>
+                <input class="form-input" type="number" step="0.01" id="f-n1_open" data-key="n1_open" tabindex="3">
+              </div>
+              <div class="form-field">
+                <label for="f-n1_close">Closing Meter</label>
+                <input class="form-input" type="number" step="0.01" id="f-n1_close" data-key="n1_close" tabindex="4">
+              </div>
+              <div class="form-field span-2">
+                <label for="f-n1_sales">Liters Dispensed (Deducted MS-1)</label>
+                <input class="form-input" type="number" step="0.01" id="f-n1_sales" data-key="n1_sales" tabindex="5">
+              </div>
+              
+              <div class="form-section-title">3 · MS-2 (Petrol Nozzle 2)</div>
+              <div class="form-field">
+                <label for="f-n2_open">Opening Meter</label>
+                <input class="form-input" type="number" step="0.01" id="f-n2_open" data-key="n2_open" tabindex="6">
+              </div>
+              <div class="form-field">
+                <label for="f-n2_close">Closing Meter</label>
+                <input class="form-input" type="number" step="0.01" id="f-n2_close" data-key="n2_close" tabindex="7">
+              </div>
+              <div class="form-field span-2">
+                <label for="f-n2_sales">Liters Dispensed (Deducted MS-2)</label>
+                <input class="form-input" type="number" step="0.01" id="f-n2_sales" data-key="n2_sales" tabindex="8">
+              </div>
+              
+              <div class="form-section-title">4 · HSD-1 (Diesel Nozzle 1)</div>
+              <div class="form-field">
+                <label for="f-n3_open">Opening Meter</label>
+                <input class="form-input" type="number" step="0.01" id="f-n3_open" data-key="n3_open" tabindex="9">
+              </div>
+              <div class="form-field">
+                <label for="f-n3_close">Closing Meter</label>
+                <input class="form-input" type="number" step="0.01" id="f-n3_close" data-key="n3_close" tabindex="10">
+              </div>
+              <div class="form-field span-2">
+                <label for="f-n3_sales">Liters Dispensed (Deducted HSD-1)</label>
+                <input class="form-input" type="number" step="0.01" id="f-n3_sales" data-key="n3_sales" tabindex="11">
+              </div>
+              
+              <div class="form-section-title">5 · Daily Tenders (INR)</div>
+              <div class="form-field">
+                <label for="f-cash">Cash Collected</label>
+                <input class="form-input" type="number" step="0.01" id="f-cash" data-key="cash" tabindex="12">
+              </div>
+              <div class="form-field">
+                <label for="f-upi">UPI Settlements</label>
+                <input class="form-input" type="number" step="0.01" id="f-upi" data-key="upi" tabindex="13">
+              </div>
+              <div class="form-field">
+                <label for="f-paytm">Paytm Specific Transfers</label>
+                <input class="form-input" type="number" step="0.01" id="f-paytm" data-key="paytm" tabindex="14">
+              </div>
+              <div class="form-field">
+                <label for="f-card">Card Terminal Payments</label>
+                <input class="form-input" type="number" step="0.01" id="f-card" data-key="card" tabindex="15">
+              </div>
+              
+              <div class="form-section-title">6 · Udhaar & Expenses</div>
+              <div class="form-field span-2">
+                <label>Udhaar (Credit Ledger Rows)</label>
+                <table class="credit-sales-table" id="credit-sales-table" style="width: 100%; border-collapse: collapse; margin-top: 8px;">
+                  <thead>
+                    <tr style="border-bottom: 1px solid var(--border-soft); text-align: left;">
+                      <th style="padding: 6px 4px; font-size: 11px; color: var(--ink-soft); width: 45%;">Party Name</th>
+                      <th style="padding: 6px 4px; font-size: 11px; color: var(--ink-soft); width: 30%;">Vehicle No</th>
+                      <th style="padding: 6px 4px; font-size: 11px; color: var(--ink-soft); width: 25%;">Amount (INR)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="credit-sales-tbody">
+                    <!-- Dynamically filled -->
+                  </tbody>
+                </table>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; margin-bottom: 12px;">
+                  <div style="display: flex; gap: 6px; align-items: center;">
+                    <button type="button" class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px; height: auto;" onclick="addCreditRow()">+ Add Row</button>
+                    <button type="button" class="btn btn-ghost" id="print-receipt-btn" style="padding: 4px 8px; font-size: 12px; height: auto; border-color: var(--accent); color: var(--accent);" onclick="printThermalReceipt()">🖨️ Print Receipt</button>
+                  </div>
+                  <div style="font-size: 13px; font-weight: bold; color: var(--ink);">
+                    Total: <span id="credit-total-display">0.00</span>
+                  </div>
+                </div>
+              </div>
+              
+              <input type="hidden" id="f-udhaar" data-key="udhaar">
+              
+              <div class="form-field span-2">
+                <label for="f-expenses">Cash Expenses</label>
+                <input class="form-input" type="number" step="0.01" id="f-expenses" data-key="expenses">
+              </div>
+              
+            </div>
+          </form>
+          
+          ${job.raw_data && job.raw_data.mathematical_warnings && job.raw_data.mathematical_warnings.length ? `
+            <div class="alert bad mt-3" style="margin-top: 16px;">
+              <strong>⚠️ Pipeline warnings for this day:</strong>
+              <ul style="margin: 4px 0 0 16px; padding: 0; font-size:12.5px;">
+                ${job.raw_data.mathematical_warnings.map(w => `<li>${w}</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+        </div>
+        
+        <div class="form-footer">
+          <button class="btn btn-primary" onclick="triggerSave()" style="flex:2;" tabindex="18">💾 VERIFY ENTRY (Ctrl+S)</button>
+          <button class="btn btn-ghost" onclick="skipCurrent()" style="flex:1;" tabindex="19">Skip for Now (Esc)</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  populateFormValues(job);
+  renderCreditSalesTable(job);
+  wireImageViewport();
+  wireFormHotkeys();
+  wireLiveCalculations();
+  validateNozzles();
+  
+  // Wire chronological continuity checker to date changes
+  const dateInput = document.getElementById('f-date');
+  if (dateInput) {
+    dateInput.addEventListener('change', runInterlockCheck);
+    dateInput.addEventListener('input', runInterlockCheck);
+  }
+  runInterlockCheck();
+  
+  // Focus management: autofocus the first field
+  const dateField = document.getElementById('f-date');
+  if (dateField) {
+    dateField.focus();
+    dateField.select();
+  }
+}
+
+function populateFormValues(job) {
+  // Populate general keys
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+  
+  setVal("f-date", job.date || "");
+  setVal("f-shift", "Morning (06:00–14:00)");
+  
+  // Populate meter replacement fields
+  const meterReplaced = job.raw_data ? (job.raw_data.meter_replaced || false) : false;
+  const replacementOffset = job.raw_data ? (job.raw_data.replacement_offset_liters || 0.0) : 0.0;
+  const elReplaced = document.getElementById("f-meter-replaced");
+  if (elReplaced) elReplaced.checked = !!meterReplaced;
+  setVal("f-replacement-offset", replacementOffset || "");
+  
+  const nozzles = job.raw_data ? job.raw_data.nozzles || [] : [];
+  const getNozzle = (idx) => nozzles[idx] || {};
+  
+  setVal("f-n1_open", getNozzle(0).opening || 0);
+  setVal("f-n1_close", getNozzle(0).closing || 0);
+  setVal("f-n1_sales", getNozzle(0).net_sales_liters || getNozzle(0).sales_liters_calculated || 0);
+  
+  setVal("f-n2_open", getNozzle(1).opening || 0);
+  setVal("f-n2_close", getNozzle(1).closing || 0);
+  setVal("f-n2_sales", getNozzle(1).net_sales_liters || getNozzle(1).sales_liters_calculated || 0);
+  
+  setVal("f-n3_open", getNozzle(2).opening || 0);
+  setVal("f-n3_close", getNozzle(2).closing || 0);
+  setVal("f-n3_sales", getNozzle(2).net_sales_liters || getNozzle(2).sales_liters_calculated || 0);
+  
+  setVal("f-cash", job.cash_tender || 0);
+  setVal("f-upi", job.upi_tender || 0);
+  setVal("f-paytm", job.paytm_transfers || 0);
+  setVal("f-card", job.card_tender || 0);
+  setVal("f-udhaar", job.udhaar_sales || 0);
+  setVal("f-expenses", job.expenses_amount || 0);
+}
+
+function renderCreditSalesTable(job) {
+  const tbody = document.getElementById('credit-sales-tbody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '';
+  const creditSales = job.raw_data ? job.raw_data.credit_sales || [] : [];
+  
+  if (creditSales.length === 0) {
+    creditSales.push({ party_name: '', vehicle_no: '', amount: 0 });
+  }
+  
+  creditSales.forEach((sale, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding: 6px 4px;">
+        <input class="form-input credit-party" data-row="${idx}" data-field="party_name" value="${sale.party_name || ''}" placeholder="Party Name" style="padding: 6px 8px; font-size:12.5px;">
+      </td>
+      <td style="padding: 6px 4px;">
+        <input class="form-input credit-vehicle" data-row="${idx}" data-field="vehicle_no" value="${sale.vehicle_no || ''}" placeholder="Vehicle No" style="padding: 6px 8px; font-size:12.5px;">
+      </td>
+      <td style="padding: 6px 4px;">
+        <input class="form-input credit-amount" type="number" step="0.01" data-row="${idx}" data-field="amount" value="${sale.amount || 0}" placeholder="Amount" style="padding: 6px 8px; font-size:12.5px;">
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  
+  updateCreditTotal();
+  reassignTabIndices();
+  wireCreditSalesNavigation();
+  // Attach autocomplete to all party name inputs in the credit table
+  PartyAC.attachAll('#credit-sales-tbody .credit-party');
+}
+
+function addCreditRow() {
+  const tbody = document.getElementById('credit-sales-tbody');
+  if (!tbody) return;
+  
+  const idx = tbody.children.length;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="padding: 6px 4px;">
+      <input class="form-input credit-party" data-row="${idx}" data-field="party_name" value="" placeholder="Party Name" style="padding: 6px 8px; font-size:12.5px;">
+    </td>
+    <td style="padding: 6px 4px;">
+      <input class="form-input credit-vehicle" data-row="${idx}" data-field="vehicle_no" value="" placeholder="Vehicle No" style="padding: 6px 8px; font-size:12.5px;">
+    </td>
+    <td style="padding: 6px 4px;">
+      <input class="form-input credit-amount" type="number" step="0.01" data-row="${idx}" data-field="amount" value="0" placeholder="Amount" style="padding: 6px 8px; font-size:12.5px;">
+    </td>
+  `;
+  tbody.appendChild(tr);
+  reassignTabIndices();
+  updateCreditTotal();
+  // Attach autocomplete to the newly added party name cell
+  const newPartyInput = tbody.lastElementChild.querySelector('.credit-party');
+  if (newPartyInput) PartyAC.attach(newPartyInput);
+}
+
+function updateCreditTotal() {
+  const amounts = document.querySelectorAll('.credit-amount');
+  let total = 0;
+  amounts.forEach(input => {
+    total += parseFloat(input.value || 0);
+  });
+  
+  const totalDisplay = document.getElementById('credit-total-display');
+  if (totalDisplay) totalDisplay.textContent = total.toFixed(2);
+  
+  const udhaarInput = document.getElementById('f-udhaar');
+  if (udhaarInput) udhaarInput.value = total.toFixed(2);
+}
+
+function reassignTabIndices() {
+  const standardKeys = [
+    'f-date', 'f-shift',
+    'f-n1_open', 'f-n1_close', 'f-n1_sales',
+    'f-n2_open', 'f-n2_close', 'f-n2_sales',
+    'f-n3_open', 'f-n3_close', 'f-n3_sales',
+    'f-cash', 'f-upi', 'f-paytm', 'f-card'
+  ];
+  
+  let currentTabIndex = 1;
+  standardKeys.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.setAttribute('tabindex', currentTabIndex++);
+  });
+  
+  const tbody = document.getElementById('credit-sales-tbody');
+  if (tbody) {
+    const rows = tbody.children;
+    for (let i = 0; i < rows.length; i++) {
+      const party = rows[i].querySelector('.credit-party');
+      const vehicle = rows[i].querySelector('.credit-vehicle');
+      const amount = rows[i].querySelector('.credit-amount');
+      if (party) party.setAttribute('tabindex', currentTabIndex++);
+      if (vehicle) vehicle.setAttribute('tabindex', currentTabIndex++);
+      if (amount) amount.setAttribute('tabindex', currentTabIndex++);
+    }
+  }
+  
+  const expensesEl = document.getElementById('f-expenses');
+  if (expensesEl) expensesEl.setAttribute('tabindex', currentTabIndex++);
+  
+  const saveBtn = document.querySelector('.form-footer .btn-primary');
+  if (saveBtn) saveBtn.setAttribute('tabindex', currentTabIndex++);
+  
+  const skipBtn = document.querySelector('.form-footer .btn-ghost');
+  if (skipBtn) skipBtn.setAttribute('tabindex', currentTabIndex++);
+}
+
+function wireCreditSalesNavigation() {
+  const tbody = document.getElementById('credit-sales-tbody');
+  if (!tbody) return;
+  
+  tbody.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const active = document.activeElement;
+      if (active && active.classList.contains('form-input')) {
+        const fieldClass = Array.from(active.classList).find(c => c.startsWith('credit-'));
+        if (fieldClass) {
+          const rowIdx = parseInt(active.dataset.row);
+          const nextRowIdx = e.key === 'ArrowDown' ? rowIdx + 1 : rowIdx - 1;
+          const targetInput = document.querySelector(`.${fieldClass}[data-row="${nextRowIdx}"]`);
+          if (targetInput) {
+            e.preventDefault();
+            targetInput.focus();
+            targetInput.select();
+          }
+        }
+      }
+    }
+  });
+  
+  tbody.addEventListener('input', e => {
+    if (e.target.classList.contains('credit-amount')) {
+      updateCreditTotal();
+    }
+  });
+}
+
+function validateNozzles() {
+  const nozzleConfigs = [
+    { openId: 'f-n1_open', closeId: 'f-n1_close', salesId: 'f-n1_sales' },
+    { openId: 'f-n2_open', closeId: 'f-n2_close', salesId: 'f-n2_sales' },
+    { openId: 'f-n3_open', closeId: 'f-n3_close', salesId: 'f-n3_sales' }
+  ];
+  
+  nozzleConfigs.forEach(config => {
+    const openEl = document.getElementById(config.openId);
+    const closeEl = document.getElementById(config.closeId);
+    const salesEl = document.getElementById(config.salesId);
+    
+    if (openEl && closeEl && salesEl) {
+      const openVal = parseFloat(openEl.value || 0);
+      const closeVal = parseFloat(closeEl.value || 0);
+      const salesVal = parseFloat(salesEl.value || 0);
+      
+      const calculated = parseFloat((closeVal - openVal).toFixed(2));
+      const isMismatch = Math.abs(calculated - salesVal) > 0.01;
+      
+      const parent = salesEl.parentElement;
+      const existingBadge = parent.querySelector('.math-mismatch-badge');
+      if (existingBadge) existingBadge.remove();
+      
+      if (isMismatch && openVal > 0 && closeVal > 0) {
+        salesEl.style.borderColor = 'orange';
+        salesEl.style.borderWidth = '2px';
+        
+        const badge = document.createElement('span');
+        badge.className = 'math-mismatch-badge';
+        badge.style = 'display:inline-block; background:orange; color:black; font-size:11px; font-weight:bold; padding:2px 6px; border-radius:4px; margin-top:4px; width:fit-content;';
+        badge.textContent = 'Math Mismatch';
+        parent.appendChild(badge);
+      } else {
+        salesEl.style.borderColor = '';
+        salesEl.style.borderWidth = '';
+      }
+    }
+  });
+}
+
+function wireLiveCalculations() {
+  const nozzleConfigs = [
+    { openId: 'f-n1_open', closeId: 'f-n1_close', salesId: 'f-n1_sales' },
+    { openId: 'f-n2_open', closeId: 'f-n2_close', salesId: 'f-n2_sales' },
+    { openId: 'f-n3_open', closeId: 'f-n3_close', salesId: 'f-n3_sales' }
+  ];
+  
+  nozzleConfigs.forEach(config => {
+    const openEl = document.getElementById(config.openId);
+    const closeEl = document.getElementById(config.closeId);
+    const salesEl = document.getElementById(config.salesId);
+    
+    const handler = () => validateNozzles();
+    if (openEl) openEl.addEventListener('input', handler);
+    if (closeEl) closeEl.addEventListener('input', handler);
+    if (salesEl) salesEl.addEventListener('input', handler);
+  });
+}
+
+function wireFormHotkeys() {
+  const inputs = document.querySelectorAll('.form-input');
+  inputs.forEach(inp => {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        triggerSave();
+      }
+    });
+  });
+}
+
+// Zoom / Pan Viewport
+function wireImageViewport() {
+  const panel = document.getElementById('image-panel');
+  const img = document.getElementById('register-img');
+  if (!panel || !img) return;
+  
+  panel.addEventListener('mousedown', e => {
+    isDragging = true;
+    startX = e.clientX - panX;
+    startY = e.clientY - panY;
+    img.style.cursor = 'grabbing';
+  });
+  
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    panX = e.clientX - startX;
+    panY = e.clientY - startY;
+    applyImageTransforms();
+  });
+  
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+    img.style.cursor = 'grab';
+  });
+  
+  panel.addEventListener('wheel', e => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 0.1 : -0.1;
+    zoom = Math.max(0.5, Math.min(4.0, zoom + factor));
+    applyImageTransforms();
+  });
+}
+
+function applyImageTransforms() {
+  const img = document.getElementById('register-img');
+  if (img) {
+    img.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom}) rotate(${rot}deg)`;
+  }
+}
+
+function changeZoom(val) {
+  zoom = Math.max(0.5, Math.min(4.0, zoom + val));
+  applyImageTransforms();
+}
+
+function resetZoom() {
+  zoom = 1.0;
+  panX = 0;
+  panY = 0;
+  rot = 0;
+  applyImageTransforms();
+}
+
+function rotateImage(deg) {
+  rot += deg;
+  applyImageTransforms();
+}
+
+function skipCurrent() {
+  if (queue.length <= 1) {
+    UI.toast("Only one item left in the queue. Cannot skip.", "warn");
+    return;
+  }
+  // Push the active item to the back of the queue
+  const active = queue.shift();
+  queue.push(active);
+  activeIndex = 0;
+  UI.toast("Skipped. Pushed sheet to back of queue.", "info");
+  renderActive();
+}
+
+async function triggerSave() {
+  const formValues = {};
+  const inputs = document.querySelectorAll('#ledger-form .form-input');
+  inputs.forEach(inp => {
+    if (inp.dataset.key) {
+      formValues[inp.dataset.key] = inp.value;
+    }
+  });
+  
+  const n = (k) => Number(formValues[k] || 0);
+  
+  const meterReplaced = document.getElementById("f-meter-replaced")?.checked || false;
+  const replacementOffset = Number(document.getElementById("f-replacement-offset")?.value || 0.0);
+  
+  const buildNozzleObj = (name, fuelType, open, close, manualSales, rate, idx) => {
+    const origNozzles = (queue[activeIndex] && queue[activeIndex].raw_data) ? (queue[activeIndex].raw_data.nozzles || []) : [];
+    const origNozzle = origNozzles[idx] || {};
+    
+    let isReplaced = origNozzle.meter_replaced || false;
+    let offset = origNozzle.replacement_offset_liters || 0.0;
+    
+    if (meterReplaced && (isReplaced || close < open || origNozzles.length === 1)) {
+      isReplaced = true;
+      if (offset === 0.0) {
+        offset = replacementOffset;
+      }
+    }
+    
+    let calcFlow;
+    if (isReplaced) {
+      calcFlow = (close - open) + offset;
+    } else if (close >= open) {
+      calcFlow = close - open;
+    } else {
+      calcFlow = (999999 - open) + close;
+    }
+    
+    const sales = manualSales || calcFlow;
+    const amt = Number((sales * rate).toFixed(2));
+    
+    return {
+      "nozzle_name": name,
+      "fuel_type": fuelType,
+      "opening": open,
+      "closing": close,
+      "sales_liters_calculated": sales,
+      "net_sales_liters": sales,
+      "rate": rate,
+      "amount_calculated": amt,
+      "is_valid": true,
+      "math_warning": null,
+      "meter_replaced": isReplaced,
+      "replacement_offset_liters": offset
+    };
+  };
+  
+  const n1_open = n("n1_open");
+  const n1_close = n("n1_close");
+  const n1_manual = n("n1_sales");
+  const n1_rate = 106.31;
+  const nozzle1 = buildNozzleObj("MS-1 (Petrol)", "MS", n1_open, n1_close, n1_manual, n1_rate, 0);
+  
+  const n2_open = n("n2_open");
+  const n2_close = n("n2_close");
+  const n2_manual = n("n2_sales");
+  const n2_rate = 106.31;
+  const nozzle2 = buildNozzleObj("MS-2 (Petrol)", "MS", n2_open, n2_close, n2_manual, n2_rate, 1);
+  
+  const n3_open = n("n3_open");
+  const n3_close = n("n3_close");
+  const n3_manual = n("n3_sales");
+  const n3_rate = 94.27;
+  const nozzle3 = buildNozzleObj("HSD-1 (Diesel)", "HSD", n3_open, n3_close, n3_manual, n3_rate, 2);
+  
+  const nozzles = [nozzle1, nozzle2, nozzle3];
+  
+  const creditSales = [];
+  const tbody = document.getElementById('credit-sales-tbody');
+  if (tbody) {
+    const rows = tbody.children;
+    for (let i = 0; i < rows.length; i++) {
+      const party = rows[i].querySelector('.credit-party').value.trim();
+      const vehicle = rows[i].querySelector('.credit-vehicle').value.trim();
+      const amount = Number(rows[i].querySelector('.credit-amount').value || 0);
+      if (party || amount > 0) {
+        creditSales.push({
+          party_name: party || "Unknown Party",
+          vehicle_no: vehicle || "N/A",
+          amount: amount,
+          remarks: "HSD credit sale"
+        });
+      }
+    }
+  }
+  
+  const total_credit = creditSales.reduce((sum, cs) => sum + cs.amount, 0);
+  
+  const cashExpenses = [];
+  const expAmt = n("expenses");
+  if (expAmt > 0) {
+    cashExpenses.push({
+      party_name: "Office Expense",
+      amount: expAmt,
+      remarks: "Cash expense"
+    });
+  }
+  
+  const savePayload = {
+    date: formValues.date || new Date().toISOString().slice(0, 10),
+    total_calculated_liters_hsd: nozzle3.net_sales_liters,
+    total_calculated_liters_ms: nozzle1.net_sales_liters + nozzle2.net_sales_liters,
+    total_cash_calculated: nozzle1.amount_calculated + nozzle2.amount_calculated + nozzle3.amount_calculated,
+    total_credit_sales: total_credit,
+    total_testing_deductions: 0.0,
+    validation_status: "balanced", // Force balanced status to make record verified!
+    mathematical_warnings: [], // Reset mathematical warnings to promote to verified
+    nozzles: nozzles,
+    credit_sales: creditSales,
+    cash_expenses: cashExpenses,
+    meter_replaced: meterReplaced,
+    replacement_offset_liters: replacementOffset
+  };
+  
+  UI.toast("💾 Saving corrections and promoting entry to SQLite...", "info");
+  
+  try {
+    const response = await fetch("http://localhost:8000/api/save-ledger-day", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(savePayload)
+    });
+    
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || "Promoting review record failed.");
+    }
+    
+    UI.toast("✓ Success: Promotional record saved & moved to successfully_imported!", "ok");
+    
+    // Remove the completed entry from queue
+    queue.splice(activeIndex, 1);
+    activeIndex = 0;
+    renderActive();
+    
+  } catch (error) {
+    console.error("Promoting failed:", error);
+    UI.toast("Failed to lock verified entry: " + error.message, "bad");
+  }
+}
+
+// Global Hotkeys for rapid clerical correction entries
+window.addEventListener('keydown', e => {
+  // Check for Ctrl + S or Cmd + S
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    triggerSave();
+  }
+  // Check for Esc
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    skipCurrent();
+  }
+});
+
+// Inline custom spin styles
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
+
+// Initial Load
+async function copyDailySummaryText() {
+  const dateInput = document.getElementById('f-date');
+  if (!dateInput || !dateInput.value) {
+    UI.toast("⚠️ Please specify a valid operations date first.", "warn");
+    return;
+  }
+  
+  const dateStr = dateInput.value;
+  UI.toast("⏳ Fetching compiled daily summary...", "info");
+  
+  try {
+    const res = await fetch(`http://localhost:8000/api/daily-summary-text?date=${dateStr}`);
+    if (!res.ok) {
+      throw new Error(`HTTP Error ${res.status}`);
+    }
+    const data = await res.json();
+    if (data.status === 'ok' && data.digest) {
+      await navigator.clipboard.writeText(data.digest);
+      UI.toast("📋 Daily summary text copied to clipboard!", "ok");
+    } else {
+      throw new Error(data.detail || "Invalid response format");
+    }
+  } catch (err) {
+    console.error("Failed to copy summary text:", err);
+    UI.toast("❌ Failed to fetch daily summary text: " + err.message, "bad");
+  }
+}
+
+// ─── Thermal Receipt Printer ─────────────────────────────────
+async function printThermalReceipt() {
+  const partyInput = document.querySelector('.credit-party');
+  if (!partyInput || !partyInput.value.trim()) {
+    UI.toast('Enter a party name in the Udhaar table first.', 'warn');
+    return;
+  }
+  
+  const partyName = partyInput.value.trim();
+  const btn = document.getElementById('print-receipt-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Printing...'; }
+  
+  try {
+    const res = await fetch('http://localhost:8000/api/print-slip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ party_name: partyName, dry_run: false })
+    });
+    
+    const data = await res.json();
+    
+    if (!res.ok) {
+      UI.toast(data.detail || 'Print failed.', 'bad');
+      return;
+    }
+    
+    if (data.dry_run) {
+      UI.toast(`No printer found. Dry-run receipt saved → ${data.receipt_path}`, 'warn');
+    } else {
+      UI.toast(`Receipt printed for ${partyName} on ${data.printer}!`, 'ok');
+    }
+    
+    if (data.ascii_preview) {
+      showReceiptPreview(partyName, data.ascii_preview);
+    }
+  } catch (err) {
+    console.error('Print slip error:', err);
+    UI.toast('Failed to reach print endpoint: ' + err.message, 'bad');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🖨️ Print Receipt'; }
+  }
+}
+
+function showReceiptPreview(partyName, asciiText) {
+  let modal = document.getElementById('receipt-preview-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'receipt-preview-modal';
+    modal.style.cssText = 'position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.7);';
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div style="background:var(--bg-soft); border:1px solid var(--border-soft); border-radius:var(--r-lg); max-width:520px; width:95%; max-height:80vh; overflow-y:auto; padding:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0; font-family:var(--font-display);">🧾 Receipt Preview — ${partyName}</h3>
+        <button class="btn btn-ghost" onclick="document.getElementById('receipt-preview-modal').style.display='none'" style="padding:4px 10px; font-size:16px; height:auto;">✕</button>
+      </div>
+      <pre style="background:#1a1816; color:#e8dcc8; padding:16px; border-radius:var(--r-md); font-family:var(--font-mono); font-size:12px; line-height:1.5; overflow-x:auto; white-space:pre; margin:0;">${asciiText}</pre>
+    </div>
+  `;
+  modal.style.display = 'flex';
+}
+
+fetchReviewQueue();
+</script>
+</body>
+</html>

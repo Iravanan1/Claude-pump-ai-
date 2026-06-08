@@ -1,0 +1,43 @@
+# Database files
+*.db
+backend/*.db
+test_*.db
+backend/test_*.db
+
+# Credentials and secrets
+.env
+backend/.env
+.env.*
+
+# Python virtual environment
+venv/
+backend/venv/
+
+# Python compiled cache
+__pycache__/
+backend/__pycache__/
+*.pyc
+backend/*.pyc
+
+# Pytest cache
+.pytest_cache/
+backend/.pytest_cache/
+
+# Parcel build directories
+dist/
+.cache/
+
+# Generated export assets and reports
+pump_exports/
+backend/test_exports/
+
+# Ingested and preprocessed register photos
+ledger_photos/
+backend/test_historical_photos/
+backend/test_flagged_records/
+
+# System / OS files
+.DS_Store
+Thumbs.db
+venv/
+node_modules/

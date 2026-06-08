@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reports &amp; Print · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+function uniqueDates(shifts) {
+  return [...new Set(shifts.map(s => (s.openedAt || '').slice(0, 10)).filter(Boolean))].sort().reverse();
+}
+
+function fuelBreakdown(shifts) {
+  const out = {};
+  shifts.forEach(sh => {
+    (sh.nozzles || []).forEach(n => {
+      const litres = Math.max(0, Number(n.close || 0) - Number(n.open || 0) - Number(n.testing || 0));
+      out[n.fuel] = (out[n.fuel] || 0) + litres;
+    });
+  });
+  return out;
+}
+
+function render() {
+  const s = PumpStore.state;
+  const dates = uniqueDates(s.shifts);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Range filters — default last 7 days
+  const start = document.getElementById('start')?.value || (() => {
+    const d = new Date(); d.setDate(d.getDate() - 6);
+    return d.toISOString().slice(0, 10);
+  })();
+  const end = document.getElementById('end')?.value || today;
+
+  const inRange = s.shifts.filter(sh => {
+    const d = (sh.openedAt || '').slice(0, 10);
+    return d >= start && d <= end;
+  });
+
+  // Range KPIs
+  let totalSales = 0, totalLitres = 0, totalCash = 0, totalUpi = 0, totalCard = 0, totalCredit = 0;
+  let shortShifts = 0;
+  inRange.forEach(sh => {
+    const t = Accounting.shiftTotals(sh);
+    totalSales += t.sales;
+    totalLitres += t.litres;
+    totalCash += Number(sh.tenders?.cash || 0);
+    totalUpi  += Number(sh.tenders?.upi || 0);
+    totalCard += Number(sh.tenders?.card || 0);
+    totalCredit += Number(sh.tenders?.credit || 0);
+    if (t.status === 'short' || t.status === 'excess') shortShifts++;
+  });
+  const fuelMix = fuelBreakdown(inRange);
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'System',
+      title: 'Reports &amp; Print Center',
+      desc: 'Generate printable daily closings, range summaries, shortage and wetstock reports. Use your browser\u2019s Print to save as PDF.'
+    })}
+
+    <div class="card no-print">
+      <div class="card-head"><h3>Range filter</h3></div>
+      <div class="row" style="gap:16px; flex-wrap:wrap;">
+        <label class="field">
+          <span class="field-label">From</span>
+          <input type="date" id="start" value="${start}" onchange="render()">
+        </label>
+        <label class="field">
+          <span class="field-label">To</span>
+          <input type="date" id="end" value="${end}" onchange="render()">
+        </label>
+        <div style="flex:1"></div>
+        <button class="btn ghost" onclick="setRange(0)">Today</button>
+        <button class="btn ghost" onclick="setRange(6)">7 days</button>
+        <button class="btn ghost" onclick="setRange(29)">30 days</button>
+        <button class="btn" onclick="window.print()">Print this report</button>
+      </div>
+    </div>
+
+    <div class="report-sheet">
+      <div class="report-letterhead">
+        <div>
+          <div class="lh-title">${s.meta.pumpName}</div>
+          <div class="lh-sub">${s.meta.brand} dealer · ${s.meta.location}</div>
+        </div>
+        <div class="lh-right">
+          <div class="lh-label">Period</div>
+          <div class="lh-period">${start} &mdash; ${end}</div>
+          <div class="lh-sub">Generated ${new Date().toLocaleString('en-IN')}</div>
+        </div>
+      </div>
+
+      <h2 class="report-h2">Operations Summary</h2>
+      <div class="grid grid-4">
+        <div class="kpi"><div class="kpi-label">Shifts</div><div class="kpi-value">${inRange.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Total sales</div><div class="kpi-value">${fmt.rs(totalSales)}</div></div>
+        <div class="kpi"><div class="kpi-label">Litres sold</div><div class="kpi-value">${fmt.L(totalLitres)}</div></div>
+        <div class="kpi"><div class="kpi-label">Shifts with variance</div><div class="kpi-value">${shortShifts}</div></div>
+      </div>
+
+      <h2 class="report-h2">Tender Breakdown</h2>
+      <table class="table">
+        <thead><tr><th>Mode</th><th class="num">Amount</th><th class="num">Share</th></tr></thead>
+        <tbody>
+          ${[
+            ['Cash',   totalCash],
+            ['UPI',    totalUpi],
+            ['Card',   totalCard],
+            ['Credit', totalCredit]
+          ].map(([label, v]) => {
+            const share = totalSales > 0 ? (v / totalSales * 100).toFixed(1) : '0.0';
+            return `<tr><td>${label}</td><td class="num">${fmt.rs(v)}</td><td class="num">${share}%</td></tr>`;
+          }).join('')}
+          <tr class="tfoot">
+            <td><b>Total collected</b></td>
+            <td class="num"><b>${fmt.rs(totalCash + totalUpi + totalCard + totalCredit)}</b></td>
+            <td class="num"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 class="report-h2">Fuel Mix</h2>
+      <table class="table">
+        <thead><tr><th>Fuel</th><th class="num">Litres</th><th class="num">Share</th></tr></thead>
+        <tbody>
+          ${Object.entries(fuelMix).length === 0
+            ? `<tr><td colspan="3" class="muted">No fuel sales in this period.</td></tr>`
+            : Object.entries(fuelMix).map(([fuel, L]) => {
+                const share = totalLitres > 0 ? (L / totalLitres * 100).toFixed(1) : '0.0';
+                return `<tr><td>${fuel}</td><td class="num">${fmt.L(L)}</td><td class="num">${share}%</td></tr>`;
+              }).join('')}
+        </tbody>
+      </table>
+
+      <h2 class="report-h2">Shift-by-Shift Journal</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date</th><th>Shift</th><th>Operator</th>
+            <th class="num">Litres</th><th class="num">Expected</th><th class="num">Collected</th>
+            <th class="num">Variance</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${inRange.length === 0
+            ? `<tr><td colspan="8" class="muted">No shifts in this period.</td></tr>`
+            : inRange.map(sh => {
+                const t = Accounting.shiftTotals(sh);
+                const cls = t.status === 'balanced' ? 'ok' : t.status === 'short' ? 'bad' : 'warn';
+                return `<tr>
+                  <td>${(sh.openedAt || '').slice(0,10)}</td>
+                  <td>${sh.shift || ''}</td>
+                  <td>${sh.operatorName || ''}</td>
+                  <td class="num">${fmt.L(t.litres)}</td>
+                  <td class="num">${fmt.rs(t.sales)}</td>
+                  <td class="num">${fmt.rs(t.tenders)}</td>
+                  <td class="num">${fmt.rs(t.variance)}</td>
+                  <td><span class="badge ${cls}">${t.status}</span></td>
+                </tr>`;
+              }).join('')}
+        </tbody>
+      </table>
+
+      <h2 class="report-h2">Shortage &amp; Anomaly Notes</h2>
+      ${(() => {
+        const issues = [];
+        inRange.forEach(sh => {
+          const a = Accounting.anomalies(sh);
+          a.forEach(x => issues.push({ ...x, date: (sh.openedAt||'').slice(0,10), shift: sh.shift }));
+        });
+        if (issues.length === 0) {
+          return `<div class="muted" style="padding:12px 0;">No anomalies detected in this period. \u2713</div>`;
+        }
+        return `<ul class="issue-list">
+          ${issues.map(i => `<li><span class="badge ${i.level === 'bad' ? 'bad' : 'warn'}">${i.level}</span>
+            <b>${i.date} ${i.shift || ''}</b> &mdash; ${i.msg}</li>`).join('')}
+        </ul>`;
+      })()}
+
+      <h2 class="report-h2">Wetstock Position (latest dip)</h2>
+      <table class="table">
+        <thead><tr><th>Tank</th><th>Fuel</th><th class="num">Capacity</th><th class="num">Current dip</th><th class="num">Fill %</th></tr></thead>
+        <tbody>
+          ${(s.tanks || []).map(t => {
+            const pct = t.capacity > 0 ? Math.round(t.currentDip / t.capacity * 100) : 0;
+            return `<tr>
+              <td>${t.name}</td>
+              <td>${t.fuel}</td>
+              <td class="num">${fmt.L(t.capacity)}</td>
+              <td class="num">${fmt.L(t.currentDip)}</td>
+              <td class="num">${pct}%</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+
+      <div class="report-signoff">
+        <div>
+          <div class="sign-line"></div>
+          <div class="sign-label">Manager signature</div>
+        </div>
+        <div>
+          <div class="sign-line"></div>
+          <div class="sign-label">Dealer signature &amp; stamp</div>
+        </div>
+      </div>
+
+      <div class="report-foot">
+        PumpAI \u00b7 generated from local audit log \u00b7 hash anchored to entry count ${PumpStore.audit().length}
+      </div>
+    </div>
+
+    <div class="card no-print mt-3">
+      <div class="card-head"><h3>Per-day quick links</h3></div>
+      ${dates.length === 0
+        ? UI.emptyState({ title: 'No shifts recorded yet', body: 'Close your first shift to see daily reports here.' })
+        : `<table class="table">
+            <thead><tr><th>Date</th><th class="num">Shifts</th><th class="num">Sales</th><th></th></tr></thead>
+            <tbody>
+              ${dates.slice(0, 30).map(d => {
+                const day = s.shifts.filter(sh => (sh.openedAt || '').startsWith(d));
+                const sales = day.reduce((a, sh) => a + Accounting.shiftTotals(sh).sales, 0);
+                return `<tr>
+                  <td>${d}</td>
+                  <td class="num">${day.length}</td>
+                  <td class="num">${fmt.rs(sales)}</td>
+                  <td class="num"><a class="btn ghost btn-sm" href="daily-closing.html?date=${d}">Open closing sheet \u2192</a></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`
+      }
+    </div>
+  `;
+}
+
+function setRange(daysBack) {
+  const end = new Date().toISOString().slice(0, 10);
+  const d = new Date(); d.setDate(d.getDate() - daysBack);
+  const start = d.toISOString().slice(0, 10);
+  document.getElementById('start').value = start;
+  document.getElementById('end').value = end;
+  render();
+}
+
+window.addEventListener('DOMContentLoaded', render);
+</script>
+</body>
+</html>

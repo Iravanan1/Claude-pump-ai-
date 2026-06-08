@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reconciliation · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+function render() {
+  const s = PumpStore.state;
+  const sh = s.activeShift;
+
+  if (!sh) {
+    document.getElementById('main').innerHTML = `
+      ${UI.pageHead({ crumb: 'Operations', title: 'Reconciliation' })}
+      <div class="card">${UI.emptyState({ title: 'No active shift to reconcile', body: '<a class="btn mt-2" href="shift-opening.html" style="margin-top:14px;display:inline-flex;">Open new shift</a>' })}</div>
+    `;
+    return;
+  }
+
+  const t = Acct.shiftTotals(sh);
+  const anom = Acct.anomalies(sh);
+  // carry-forward against previous shift
+  const prev = s.shifts[s.shifts.length - 1];
+  const cfIssues = Acct.validateCarryForward(prev, sh);
+  const allIssues = [...anom, ...cfIssues];
+  const blockers = allIssues.filter(a => a.level === 'bad');
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Operations · Close out',
+      title: 'Shift Reconciliation',
+      desc: `Final verification before closing ${sh.operatorName}'s shift. Anything that doesn't reconcile is flagged below.`,
+      actions: `<a class="btn" href="active-shift.html">← Back to shift</a>`
+    })}
+
+    <div class="grid grid-3">
+      <div class="kpi">
+        <div class="kpi-label">Expected (sales)</div>
+        <div class="kpi-value">${fmt.rs(t.expectedRs)}</div>
+        <div class="kpi-foot">${fmt.L(t.sales.litres)}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Collected (tenders + expenses)</div>
+        <div class="kpi-value">${fmt.rs(t.collectedRs)}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Difference</div>
+        <div class="kpi-value" style="color:${t.status === 'balanced' ? 'var(--ok)' : t.status === 'short' ? 'var(--bad)' : 'var(--warn)'};">
+          ${t.varianceRs >= 0 ? '+' : ''}${fmt.rs(t.varianceRs)}
+        </div>
+        <div class="kpi-foot"><span class="badge ${t.status === 'balanced' ? 'ok' : t.status === 'short' ? 'bad' : 'warn'}"><span class="dot"></span>${t.status}</span></div>
+      </div>
+    </div>
+
+    ${allIssues.length === 0 ? `
+      <div class="alert ok mt-3"><span class="icon">✓</span>All checks passed. This shift is clean and ready to close.</div>
+    ` : `
+      <div class="card mt-3">
+        <div class="card-title"><h3>Issues found (${allIssues.length})</h3></div>
+        ${allIssues.map(a => `<div class="alert ${a.level}"><span class="icon">⚠</span>${a.msg}</div>`).join('')}
+      </div>
+    `}
+
+    <div class="grid grid-2 mt-3">
+      <div class="card">
+        <div class="card-title"><h3>Per-nozzle breakdown</h3></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>Nozzle</th><th class="num">Litres</th><th class="num">Amount</th></tr></thead>
+            <tbody>
+              ${t.rows.map(r => `<tr>
+                <td><strong>${r.name}</strong> <small class="muted">${r.fuel}</small></td>
+                <td class="num">${fmt.num(r.litres, 2)}</td>
+                <td class="num">${fmt.rs(r.amountRs)}</td>
+              </tr>`).join('')}
+              <tr style="background: var(--bg-soft);">
+                <td><strong>Total</strong></td>
+                <td class="num"><strong>${fmt.num(t.sales.litres, 2)}</strong></td>
+                <td class="num"><strong>${fmt.rs(t.sales.amountRs)}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><h3>Tender breakdown</h3></div>
+        <div class="table-wrap">
+          <table class="t">
+            <tbody>
+              <tr><td>Cash</td><td class="num">${fmt.rs(t.tenders.cash)}</td></tr>
+              <tr><td>UPI / QR</td><td class="num">${fmt.rs(t.tenders.upi)}</td></tr>
+              <tr><td>Card</td><td class="num">${fmt.rs(t.tenders.card)}</td></tr>
+              <tr><td>Credit (udhaar)</td><td class="num">${fmt.rs(t.tenders.credit)}</td></tr>
+              <tr><td>Fleet</td><td class="num">${fmt.rs(t.tenders.fleet)}</td></tr>
+              <tr style="background: var(--bg-soft);"><td><strong>Tenders subtotal</strong></td><td class="num"><strong>${fmt.rs(t.tenders.totalRs)}</strong></td></tr>
+              <tr><td>+ Expenses paid out</td><td class="num">${fmt.rs(t.expenses.totalRs)}</td></tr>
+              <tr style="background: var(--bg-soft);"><td><strong>Effective collection</strong></td><td class="num"><strong>${fmt.rs(t.collectedRs)}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-title"><h3>Closing notes</h3></div>
+      <div class="field">
+        <label>Reconciliation comment (recommended if variance)</label>
+        <textarea class="textarea" id="close-note" placeholder="e.g., ₹50 short — operator forgot to log small petrol sale. Verified via CCTV."></textarea>
+      </div>
+      <div class="row mt-2" style="gap: 10px; margin-top: 14px;">
+        <button class="btn btn-primary" id="close-btn" ${blockers.length ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>
+          ${blockers.length ? `Resolve ${blockers.length} blocker${blockers.length === 1 ? '' : 's'} first` : 'Close shift & archive'}
+        </button>
+        <a class="btn" href="active-shift.html">Back to edit</a>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('close-btn').onclick = closeShift;
+}
+
+function closeShift() {
+  const note = document.getElementById('close-note').value;
+  if (!UI.confirmAction('Close this shift? It will be archived and cannot be edited (but corrections can be logged via adjustment entries).')) return;
+
+  PumpStore.update('shift.close', s => {
+    const sh = s.activeShift;
+    sh.closedAt = PumpStore.nowISO();
+    sh.closingNote = note;
+    sh.finalTotals = Acct.shiftTotals(sh);
+    s.shifts.push(sh);
+    s.activeShift = null;
+  }, { note });
+  UI.toast('Shift closed and archived', 'ok');
+  setTimeout(() => location.href = 'daily-closing.html', 600);
+}
+
+render();
+</script>
+</body>
+</html>

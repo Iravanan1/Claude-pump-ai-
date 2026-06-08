@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wetstock Register · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+  /* Pulsating high-priority alert for decanting block */
+  @keyframes alert-pulsate {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  }
+  .alert-pulse-bad {
+    border: 2px solid var(--bad) !important;
+    animation: alert-pulsate 2s infinite;
+  }
+</style>
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+let local = {}; // working values per tank (not persisted until "Save check")
+
+let decantingState = {
+  invoice_no: '',
+  date: new Date().toLocaleDateString('en-CA'),
+  tank_lorry_no: '',
+  product_type: 'HSD',
+  invoice_volume_liters: '',
+  raw_observed_volume_liters: '',
+  invoice_density_at_15c: '',
+  observed_density_raw: '',
+  observed_temperature_celsius: '',
+  observed_compartment_dips_mm: '',
+  current_dip_mm: ''
+};
+
+let decantingHistory = null;
+
+function triggerSpaceCheck() {
+  const prod = decantingState.product_type;
+  const invoiceVol = parseFloat(decantingState.invoice_volume_liters) || 0;
+  const rawObsVol = parseFloat(decantingState.raw_observed_volume_liters) || invoiceVol;
+  const currDip = decantingState.current_dip_mm ? parseFloat(decantingState.current_dip_mm) : null;
+  
+  const alertEl = document.getElementById('dec-clearance-alert');
+  const titleEl = document.getElementById('dec-clearance-title');
+  const bodyEl = document.getElementById('dec-clearance-body');
+  
+  if (!alertEl || !titleEl || !bodyEl) return;
+  
+  if (rawObsVol <= 0) {
+    alertEl.className = 'alert info';
+    alertEl.style.border = '';
+    titleEl.textContent = 'Underground Capacity Guard';
+    bodyEl.textContent = 'Enter Product Type and Volume to verify clearance safety.';
+    return;
+  }
+  
+  let url = `/api/decanting/check-space?product_type=${prod}&actual_received_volume=${rawObsVol}`;
+  if (currDip !== null) {
+    url += `&current_dip_mm=${currDip}`;
+  }
+  
+  fetch(url)
+    .then(r => r.json())
+    .then(res => {
+      if (res.safe) {
+        alertEl.className = 'alert ok';
+        alertEl.style.border = '';
+        titleEl.innerHTML = '✅ Clearance Approved';
+        bodyEl.innerHTML = `
+          <strong>Tank ID:</strong> ${res.tank_id}<br>
+          <strong>Total Capacity:</strong> ${fmt.num(res.capacity_liters, 0)} L<br>
+          <strong>Current Stock:</strong> ${fmt.num(res.current_stock_liters, 1)} L<br>
+          <strong>Remaining Space (Ullage):</strong> ${fmt.num(res.ullage_liters, 1)} L<br>
+          <span style="color:var(--ok); font-weight:bold; margin-top:4px; display:inline-block;">Sufficient capacity to receive this load safely.</span>
+        `;
+      } else {
+        alertEl.className = 'alert bad alert-pulse-bad';
+        titleEl.innerHTML = '⚠️ CRITICAL: Insufficient Underground Tank Space for Decanting';
+        bodyEl.innerHTML = `
+          <strong>Tank ID:</strong> ${res.tank_id}<br>
+          <strong>Total Capacity:</strong> ${fmt.num(res.capacity_liters, 0)} L<br>
+          <strong>Current Stock:</strong> ${fmt.num(res.current_stock_liters, 1)} L<br>
+          <strong>Remaining Space (Ullage):</strong> ${fmt.num(res.ullage_liters, 1)} L<br>
+          <strong>Incoming Volume:</strong> ${fmt.num(rawObsVol, 0)} L<br>
+          <span style="color:var(--bad); font-weight:bold; margin-top:4px; display:inline-block;">Warning: Risk of overflow/spill. Decanting is blocked.</span>
+        `;
+      }
+    })
+    .catch(err => {
+      console.error('Clearance check error:', err);
+    });
+}
+
+function loadDecantingHistory() {
+  fetch('/api/decanting/receipts')
+    .then(r => r.json())
+    .then(res => {
+      if (res.status === 'success') {
+        decantingHistory = res.receipts;
+        renderDecantingHistory();
+      }
+    })
+    .catch(err => {
+      console.error('Failed to load decanting history:', err);
+    });
+}
+
+function renderDecantingHistory() {
+  const body = document.getElementById('decanting-history-body');
+  if (!body) return;
+  
+  if (!decantingHistory || decantingHistory.length === 0) {
+    body.innerHTML = '<tr><td colspan="8" class="center muted">No decanting records logged.</td></tr>';
+    return;
+  }
+  
+  body.innerHTML = decantingHistory.map(r => {
+    const shortage = parseFloat(r.transit_shortage_liters) || 0;
+    const shortageClass = shortage > 50 ? 'bad' : shortage > 0 ? 'warn' : 'ok';
+    return `
+      <tr>
+        <td>${r.date}</td>
+        <td><strong>${r.invoice_no}</strong></td>
+        <td>${r.tank_lorry_no}</td>
+        <td><span class="badge info">${r.product_type}</span></td>
+        <td class="num">${fmt.num(r.invoice_volume_liters, 1)} L</td>
+        <td class="num">${fmt.num(r.actual_received_volume_liters, 1)} L</td>
+        <td class="num" style="color:var(--${shortageClass === 'ok' ? 'ok' : shortageClass === 'bad' ? 'bad' : 'warn'}); font-weight:bold;">
+          ${shortage > 0 ? '+' : ''}${fmt.num(shortage, 1)} L
+        </td>
+        <td>
+          <span class="badge ${shortageClass}">
+            <span class="dot"></span>
+            ${shortage > 50 ? 'High Shortage Claim' : shortage > 0 ? 'Normal Transit Loss' : 'Balanced'}
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function render() {
+  const s = PumpStore.state;
+  // compute sales by fuel from all shifts today
+  const today = new Date().toISOString().slice(0,10);
+  const todayShifts = s.shifts.filter(sh => (sh.openedAt || '').slice(0, 10) === today);
+  const salesByFuel = {};
+  todayShifts.forEach(sh => Acct.shiftTotals(sh).rows.forEach(r => {
+    salesByFuel[r.fuel] = (salesByFuel[r.fuel] || 0) + r.litres;
+  }));
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Records',
+      title: 'Wetstock Register',
+      desc: 'Daily tank dip reconciliation. Book stock vs measured dip — any unexplained variance signals leakage, theft, or meter drift.'
+    })}
+
+    <div class="grid grid-3">
+      ${s.tanks.map(t => {
+        const pct = Math.round((t.dip / t.capacity) * 100);
+        const ullage = t.capacity - t.dip;
+        return `
+          <div class="card">
+            <div class="card-title">
+              <h3>${t.fuel} · <small class="muted">${t.id}</small></h3>
+              <span class="badge ${pct < 20 ? 'bad' : pct < 35 ? 'warn' : 'ok'}"><span class="dot"></span>${pct}%</span>
+            </div>
+            <div style="height:10px; background: var(--bg-sunken); border-radius:5px; overflow:hidden; margin-bottom:14px;">
+              <div style="height:100%; width:${pct}%; background: linear-gradient(90deg, var(--accent), var(--accent-soft));"></div>
+            </div>
+            <div class="grid grid-2" style="gap:8px; font-size:13px;">
+              <div><small>Current dip</small><div class="num">${fmt.num(t.dip, 0)} L</div></div>
+              <div><small>Capacity</small><div class="num">${fmt.num(t.capacity, 0)} L</div></div>
+              <div><small>Ullage (space)</small><div class="num">${fmt.num(ullage, 0)} L</div></div>
+              <div><small>Dead stock</small><div class="num">${fmt.num(t.dead, 0)} L</div></div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-title">
+        <h3>Today's reconciliation</h3>
+        <span class="muted">${new Date(today).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="t">
+          <thead><tr>
+            <th>Tank</th><th>Fuel</th>
+            <th class="num">Opening dip</th>
+            <th class="num">+ Receipts</th>
+            <th class="num">− Sales</th>
+            <th class="num">− Testing</th>
+            <th class="num">Book closing</th>
+            <th class="num">Actual dip</th>
+            <th class="num">Variance</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody>
+            ${s.tanks.map(t => {
+              const v = local[t.id] || { opening: t.dip, receipts: 0, testing: 0, closing: t.dip };
+              const sales = salesByFuel[t.fuel] || 0;
+              const res = Acct.wetstock(t, {
+                openingDip: Number(v.opening),
+                receipts:   Number(v.receipts),
+                salesL:     sales,
+                testingL:   Number(v.testing),
+                closingDip: Number(v.closing)
+              });
+              const cls = res.status === 'ok' ? 'ok' : res.status === 'short' ? 'bad' : 'warn';
+              return `<tr>
+                <td><strong>${t.id}</strong></td>
+                <td>${t.fuel}</td>
+                <td class="num"><input class="input mono" data-id="${t.id}" data-k="opening" type="number" step="1" value="${v.opening}" style="width:90px; text-align:right;"></td>
+                <td class="num"><input class="input mono" data-id="${t.id}" data-k="receipts" type="number" step="1" value="${v.receipts}" style="width:90px; text-align:right;"></td>
+                <td class="num">${fmt.num(sales, 2)}</td>
+                <td class="num"><input class="input mono" data-id="${t.id}" data-k="testing" type="number" step="0.1" value="${v.testing}" style="width:70px; text-align:right;"></td>
+                <td class="num"><strong>${fmt.num(res.book, 2)}</strong></td>
+                <td class="num"><input class="input mono" data-id="${t.id}" data-k="closing" type="number" step="1" value="${v.closing}" style="width:90px; text-align:right;"></td>
+                <td class="num" style="color: var(--${cls === 'ok' ? 'ok' : cls === 'bad' ? 'bad' : 'warn'})"><strong>${res.variance >= 0 ? '+' : ''}${fmt.num(res.variance, 2)}</strong></td>
+                <td><span class="badge ${cls}"><span class="dot"></span>${res.status}</span></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="alert info mt-2" style="margin-top:14px;">
+        <span class="icon">ℹ</span>
+        <div>Tolerance set to ${s.settings.shortageToleranceL} L per tank. Receipts are tanker deliveries. Testing is fuel pulled out for nozzle calibration.</div>
+      </div>
+
+      <div class="row mt-2" style="margin-top:14px; gap:8px;">
+        <button class="btn btn-primary" id="save-btn">Save dip reading</button>
+        <button class="btn" id="receipt-btn">+ Log tanker receipt</button>
+      </div>
+    </div>
+
+    <!-- Decanting Auditor Panel -->
+    <div class="card mt-3">
+      <div class="card-title">
+        <h3>Tanker Decanting & Transit Shortage Auditor</h3>
+        <span class="badge info"><span class="dot"></span>Safety Interlocked</span>
+      </div>
+      
+      <div class="grid grid-2" style="gap:24px; margin-top:14px;">
+        <!-- Left Panel: Audit Input Form -->
+        <div>
+          <form id="dec-form" onsubmit="return false;" style="display:flex; flex-direction:column; gap:12px;">
+            <div class="grid grid-2" style="gap:10px;">
+              <div class="field">
+                <label>Invoice No</label>
+                <input class="input mono" type="text" id="dec-invoice-no" value="${decantingState.invoice_no}" required placeholder="e.g. INV-2026-982">
+              </div>
+              <div class="field">
+                <label>Date</label>
+                <input class="input mono" type="date" id="dec-date" value="${decantingState.date}" required>
+              </div>
+            </div>
+            
+            <div class="grid grid-2" style="gap:10px;">
+              <div class="field">
+                <label>Tank Lorry No</label>
+                <input class="input mono" type="text" id="dec-lorry-no" value="${decantingState.tank_lorry_no}" required placeholder="e.g. KA-02-C-8812">
+              </div>
+              <div class="field">
+                <label>Product Type</label>
+                <select class="input" id="dec-product-type" style="height:38px; padding: 4px 8px;">
+                  <option value="HSD" ${decantingState.product_type === 'HSD' ? 'selected' : ''}>HSD (Diesel - Tank 1)</option>
+                  <option value="MS" ${decantingState.product_type === 'MS' ? 'selected' : ''}>MS (Petrol - Tank 2)</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="grid grid-3" style="gap:10px;">
+              <div class="field">
+                <label>Invoice Vol (L)</label>
+                <input class="input mono" type="number" step="1" id="dec-invoice-vol" value="${decantingState.invoice_volume_liters}" required placeholder="e.g. 12000">
+              </div>
+              <div class="field">
+                <label>Raw Observed Vol (L)</label>
+                <input class="input mono" type="number" step="1" id="dec-raw-obs-vol" value="${decantingState.raw_observed_volume_liters}" placeholder="Invoice Vol fallback">
+              </div>
+              <div class="field">
+                <label>Invoice Density @ 15°C</label>
+                <input class="input mono" type="number" step="0.1" id="dec-invoice-density" value="${decantingState.invoice_density_at_15c}" required placeholder="e.g. 835.0">
+              </div>
+            </div>
+            
+            <div class="grid grid-3" style="gap:10px;">
+              <div class="field">
+                <label>Observed Raw Density</label>
+                <input class="input mono" type="number" step="0.1" id="dec-obs-density" value="${decantingState.observed_density_raw}" required placeholder="e.g. 828.4">
+              </div>
+              <div class="field">
+                <label>Observed Temp (°C)</label>
+                <input class="input mono" type="number" step="0.1" id="dec-obs-temp" value="${decantingState.observed_temperature_celsius}" required placeholder="e.g. 29.5">
+              </div>
+              <div class="field">
+                <label>Current Tank Dip (mm)</label>
+                <input class="input mono" type="number" step="1" id="dec-curr-dip" value="${decantingState.current_dip_mm}" placeholder="Optional (Ullage check)">
+              </div>
+            </div>
+            
+            <div class="field">
+              <label>Observed Compartment Dips (mm) <small class="muted">(comma-separated list)</small></label>
+              <input class="input mono" type="text" id="dec-dips" value="${decantingState.observed_compartment_dips_mm}" required placeholder="e.g. 120,120,120">
+            </div>
+            
+            <button class="btn btn-primary mt-1" id="decanting-save-btn" style="margin-top:8px;">Audit & Record Decanting</button>
+          </form>
+        </div>
+        
+        <!-- Right Panel: Clearance Safety & VCF Info -->
+        <div style="display:flex; flex-direction:column; justify-content:space-between; gap:16px;">
+          <div id="dec-clearance-alert" class="alert info" style="margin:0; padding:20px; min-height:160px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; border-radius:6px; font-weight:600;">
+            <span class="icon" style="font-size:24px; margin-bottom:8px;">ℹ</span>
+            <div id="dec-clearance-title" style="font-size:15px; margin-bottom:4px;">Underground Capacity Guard</div>
+            <div id="dec-clearance-body" class="muted" style="font-size:12px; font-weight:normal;">Enter Product Type and Volume to verify clearance safety.</div>
+          </div>
+          
+          <div class="alert info" style="margin:0; font-size:12px; line-height:1.4;">
+            <span class="icon">📈</span>
+            <div>
+              <strong>ASTM Table 53B/53A Volume Correction:</strong><br>
+              Calculates standard volume correction factors (VCF) automatically to determine the net received volume back to 15°C standard conditions. Any shortages are logged directly to the Transporter Transit Claims Ledger.
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="divider" style="margin: 24px 0;"></div>
+      
+      <div class="card-title">
+        <h3>Transporter Transit Claims Ledger</h3>
+        <small class="muted">Chronological audit list of decanted receipts & shortages</small>
+      </div>
+      
+      <div class="table-wrap">
+        <table class="t">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Invoice No</th>
+              <th>Lorry No</th>
+              <th>Product</th>
+              <th class="num">Invoice Vol (L)</th>
+              <th class="num">Net Received 15°C (L)</th>
+              <th class="num">Transit Shortage (L)</th>
+              <th>Audit Status</th>
+            </tr>
+          </thead>
+          <tbody id="decanting-history-body">
+            <tr><td colspan="8" class="center muted">Loading audit entries...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // wire inputs
+  document.querySelectorAll('input[data-id]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const id = inp.dataset.id;
+      local[id] = local[id] || {};
+      local[id][inp.dataset.k] = inp.value;
+      // re-render variance for that row only — simpler to re-render all
+      render();
+    });
+  });
+
+  document.getElementById('save-btn').onclick = () => {
+    PumpStore.update('wetstock.save', s => {
+      s.tanks.forEach(t => {
+        const v = local[t.id];
+        if (v && v.closing != null) t.dip = Number(v.closing);
+      });
+    }, { snapshot: local });
+    local = {};
+    UI.toast('Dip reading saved', 'ok');
+    render();
+  };
+
+  document.getElementById('receipt-btn').onclick = () => {
+    const tankId = prompt('Tank ID (T1/T2/T3):');
+    const t = PumpStore.state.tanks.find(x => x.id === tankId);
+    if (!t) { UI.toast('Tank not found', 'bad'); return; }
+    const litres = Number(prompt('Receipt litres:'));
+    if (!litres || litres <= 0) return;
+    PumpStore.update('wetstock.receipt', s => {
+      const tt = s.tanks.find(x => x.id === tankId);
+      tt.dip += litres;
+    }, { tankId, litres });
+    UI.toast(`Receipt of ${litres} L logged for ${tankId}`, 'ok');
+    render();
+  };
+
+  // wire decanting inputs
+  const decInputs = [
+    'dec-invoice-no', 'dec-date', 'dec-lorry-no', 'dec-product-type',
+    'dec-invoice-vol', 'dec-raw-obs-vol', 'dec-invoice-density',
+    'dec-obs-density', 'dec-obs-temp', 'dec-curr-dip', 'dec-dips'
+  ];
+  
+  decInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', () => {
+        let key = id.replace('dec-', '').replace(/-/g, '_');
+        if (key === 'lorry_no') key = 'tank_lorry_no';
+        if (key === 'invoice_vol') key = 'invoice_volume_liters';
+        if (key === 'raw_obs_vol') key = 'raw_observed_volume_liters';
+        if (key === 'invoice_density') key = 'invoice_density_at_15c';
+        if (key === 'obs_density') key = 'observed_density_raw';
+        if (key === 'obs_temp') key = 'observed_temperature_celsius';
+        if (key === 'dips') key = 'observed_compartment_dips_mm';
+        
+        decantingState[key] = el.value;
+        
+        // Trigger space check on key inputs
+        if (['dec-product-type', 'dec-invoice-vol', 'dec-raw-obs-vol', 'dec-curr-dip'].includes(id)) {
+          triggerSpaceCheck();
+        }
+      });
+    }
+  });
+
+  // Re-run clearance check on load of form
+  triggerSpaceCheck();
+
+  // Load decanting history if not loaded yet
+  if (decantingHistory === null) {
+    loadDecantingHistory();
+  } else {
+    renderDecantingHistory();
+  }
+
+  document.getElementById('decanting-save-btn').onclick = () => {
+    const invoiceNo = decantingState.invoice_no.trim();
+    const date = decantingState.date.trim();
+    const lorryNo = decantingState.tank_lorry_no.trim();
+    const invoiceVol = parseFloat(decantingState.invoice_volume_liters);
+    const invoiceDensity = parseFloat(decantingState.invoice_density_at_15c);
+    const obsDensity = parseFloat(decantingState.observed_density_raw);
+    const obsTemp = parseFloat(decantingState.observed_temperature_celsius);
+    const dips = decantingState.observed_compartment_dips_mm.trim();
+    const rawObsVol = decantingState.raw_observed_volume_liters ? parseFloat(decantingState.raw_observed_volume_liters) : null;
+    const currDip = decantingState.current_dip_mm ? parseFloat(decantingState.current_dip_mm) : null;
+    
+    if (!invoiceNo || !date || !lorryNo || isNaN(invoiceVol) || isNaN(invoiceDensity) || isNaN(obsDensity) || isNaN(obsTemp) || !dips) {
+      UI.toast('Please fill all required decanting audit fields.', 'bad');
+      return;
+    }
+    
+    const payload = {
+      invoice_no: invoiceNo,
+      date: date,
+      tank_lorry_no: lorryNo,
+      product_type: decantingState.product_type,
+      invoice_volume_liters: invoiceVol,
+      invoice_density_at_15c: invoiceDensity,
+      observed_compartment_dips_mm: dips,
+      observed_density_raw: obsDensity,
+      observed_temperature_celsius: obsTemp,
+      raw_observed_volume_liters: rawObsVol,
+      current_dip_mm: currDip
+    };
+    
+    // First verify space safety once more before executing
+    fetch(`/api/decanting/check-space?product_type=${payload.product_type}&actual_received_volume=${rawObsVol || invoiceVol}${currDip !== null ? '&current_dip_mm=' + currDip : ''}`)
+      .then(r => r.json())
+      .then(spaceRes => {
+        if (!spaceRes.safe) {
+          UI.toast('CRITICAL: Insufficient Underground Tank Space for Decanting', 'bad');
+          return;
+        }
+        
+        // Safe, post the receipt
+        fetch('/api/decanting/receipt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(saveRes => {
+          if (saveRes.status === 'success') {
+            UI.toast(`Decanting logged! Shortage: ${saveRes.transit_shortage_liters} L.`, 'ok');
+            
+            // Clear decanting state except date
+            decantingState = {
+              invoice_no: '',
+              date: new Date().toLocaleDateString('en-CA'),
+              tank_lorry_no: '',
+              product_type: 'HSD',
+              invoice_volume_liters: '',
+              raw_observed_volume_liters: '',
+              invoice_density_at_15c: '',
+              observed_density_raw: '',
+              observed_temperature_celsius: '',
+              observed_compartment_dips_mm: '',
+              current_dip_mm: ''
+            };
+            
+            // Re-render and reload history
+            render();
+            decantingHistory = null;
+            loadDecantingHistory();
+          } else {
+            UI.toast('Failed to save decanting receipt: ' + (saveRes.detail || 'unknown error'), 'bad');
+          }
+        })
+        .catch(err => {
+          UI.toast('Failed to record decanting receipt: ' + err.message, 'bad');
+        });
+      })
+      .catch(err => {
+        UI.toast('Space validation failed: ' + err.message, 'bad');
+      });
+  };
+}
+
+render();
+</script>
+</body>
+</html>

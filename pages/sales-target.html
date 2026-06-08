@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales Target Analytics &amp; Breakeven · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 16px;
+  }
+  @media (max-width: 900px) {
+    .grid-2 {
+      grid-template-columns: 1fr;
+    }
+  }
+  .target-dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  /* Circular Progress Widget */
+  .circle-widget-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+  }
+  .progress-ring-container {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    margin: 16px 0;
+  }
+  .progress-ring {
+    transform: rotate(-90deg);
+  }
+  .progress-ring-bg {
+    stroke: var(--border-soft);
+  }
+  .progress-ring-fill {
+    stroke: var(--accent);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.35s;
+    transform-origin: 50% 50%;
+  }
+  .progress-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .progress-ring-pct {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: bold;
+    color: var(--accent-ink);
+  }
+  .progress-ring-label {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  /* Warning Alert Card */
+  .warn-alert-card {
+    display: flex;
+    gap: 16px;
+    padding: 18px;
+    background: var(--warn-bg);
+    border: 1px solid var(--warn);
+    border-radius: var(--r);
+    color: var(--ink);
+    align-items: flex-start;
+  }
+  .alert-icon {
+    font-size: 24px;
+    line-height: 1;
+  }
+  .alert-content h4 {
+    margin: 0 0 6px 0;
+    color: var(--accent-ink);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .alert-content p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+  
+  /* Bar Chart CSS rendering */
+  .bar-chart-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 20px;
+  }
+  .chart-wrapper {
+    height: 200px;
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    padding: 10px 10px 0 10px;
+    border-bottom: 1px solid var(--border);
+    margin-top: 24px;
+  }
+  .chart-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+    position: relative;
+  }
+  .chart-bar {
+    width: 100%;
+    background: var(--info);
+    border-top-left-radius: 2px;
+    border-top-right-radius: 2px;
+    min-height: 2px;
+    transition: height 0.3s ease;
+    cursor: pointer;
+  }
+  .chart-bar:hover {
+    background: var(--accent);
+  }
+  .chart-val {
+    font-size: 10px;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+    font-family: var(--font-mono);
+  }
+  .chart-label {
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 8px;
+    transform: rotate(-15deg);
+    white-space: nowrap;
+  }
+  
+  /* KPI lists */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+  }
+  .kpi-item {
+    background: var(--bg-sunken);
+    padding: 10px 14px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border-soft);
+  }
+  .kpi-label {
+    font-size: 11px;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .kpi-val {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+const API_BASE = "http://localhost:8000/api";
+
+async function loadAnalyticsData() {
+  try {
+    const res = await fetch(`${API_BASE}/analytics/sales-targets`);
+    if (!res.ok) throw new Error("Failed to load sales targets data from server.");
+    const data = await res.json();
+    render(data);
+    
+    // Animate progress ring
+    setTimeout(() => {
+      setProgress(data.progress_percentage);
+    }, 100);
+    
+  } catch (err) {
+    UI.toast(err.message, "bad");
+    render();
+  }
+}
+
+async function updateOverhead(e) {
+  e.preventDefault();
+  const form = e.target;
+  const overhead = parseFloat(form.monthly_overhead.value);
+  
+  if (isNaN(overhead) || overhead <= 0.0) {
+    UI.toast("Please specify a valid positive overhead amount.", "bad");
+    return;
+  }
+  
+  try {
+    const res = await fetch(`${API_BASE}/analytics/sales-targets/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ monthly_overhead: overhead })
+    });
+    
+    if (!res.ok) throw new Error("Failed to save overhead configuration.");
+    UI.toast("Monthly fixed overhead config updated successfully!", "ok");
+    await loadAnalyticsData();
+  } catch (err) {
+    UI.toast(err.message, "bad");
+  }
+}
+
+function setProgress(percent) {
+  const circle = document.querySelector('.progress-ring-fill');
+  if (!circle) return;
+  const radius = circle.r.baseVal.value;
+  const circumference = 2 * Math.PI * radius;
+  
+  circle.style.strokeDasharray = `${circumference} ${circumference}`;
+  
+  // Bound percent between 0 and 100 for visual fill representation
+  const boundedPct = Math.min(100, Math.max(0, percent));
+  const offset = circumference - (boundedPct / 100) * circumference;
+  circle.style.strokeDashoffset = offset;
+}
+
+function render(data = null) {
+  if (!data) {
+    document.getElementById('main').innerHTML = `
+      ${UI.pageHead({
+        crumb: 'Analytics',
+        title: 'Sales Target &amp; Breakeven View',
+        desc: 'Track daily volumes needed to hit break-even margins against fixed operational cost configurations.'
+      })}
+      ${UI.emptyState({
+        icon: '⚠️',
+        title: 'Query Failed',
+        body: 'Could not fetch analytics details. Please verify your connection to the local database.'
+      })}
+    `;
+    return;
+  }
+
+  // Calculate max profit for bar chart scaling
+  const maxProfit = Math.max(100, ...data.monthly_history.map(h => h.monthly_profit));
+  
+  // Format bar chart columns
+  const barChartHtml = data.monthly_history.length === 0
+    ? `<div style="flex:1; text-align:center; padding: 40px 0;" class="muted">No historical summaries recorded yet.</div>`
+    : data.monthly_history.map(h => {
+        const heightPct = maxProfit > 0 ? (h.monthly_profit / maxProfit) * 100 : 0;
+        return `
+          <div class="chart-column">
+            <span class="chart-val">₹${(h.monthly_profit / 1000).toFixed(0)}k</span>
+            <div class="chart-bar" style="height: ${heightPct}%;" title="${h.month}: ₹${h.monthly_profit.toLocaleString()}"></div>
+            <span class="chart-label">${h.month}</span>
+          </div>
+        `;
+      }).join('');
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Analytics',
+      title: 'Sales Target &amp; Breakeven View',
+      desc: 'Track daily volumes needed to hit break-even margins against fixed operational cost configurations.'
+    })}
+
+    <div class="grid grid-2 mt-3">
+      <!-- Left Config Card -->
+      <div class="card">
+        <div class="card-head"><h3>Fixed Overhead Configuration</h3></div>
+        <form id="overhead-config-form" onsubmit="updateOverhead(event)">
+          <div class="field">
+            <label for="monthly_overhead">Monthly Fixed Overhead (₹ / Month)</label>
+            <input class="input mono" type="number" step="1" min="1" id="monthly_overhead" name="monthly_overhead" required value="${data.monthly_overhead}">
+            <span class="hint">Includes employee payroll, land lease, electrical bills, license renewals, and banking fees.</span>
+          </div>
+          
+          <button class="btn btn-primary" type="submit" style="width:100%; margin-top:16px;">Update Overhead Cost</button>
+        </form>
+        
+        <div class="card-head mt-3"><h4>Active Margins &amp; Targets</h4></div>
+        <div class="kpi-row">
+          <div class="kpi-item">
+            <div class="kpi-label">Avg Margin / Liter</div>
+            <div class="kpi-val">₹${data.average_margin_per_liter.toFixed(2)}</div>
+          </div>
+          <div class="kpi-item">
+            <div class="kpi-label">Daily Overhead Target</div>
+            <div class="kpi-val">₹${(data.monthly_overhead / 30).toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Analytics Dashboard -->
+      <div class="target-dashboard-grid">
+        <!-- Circle Progress Rings -->
+        <div class="circle-widget-card">
+          <div class="kpi-label" style="text-align: center;">Breakeven Progress Today</div>
+          <div class="progress-ring-container">
+            <svg class="progress-ring" width="220" height="220">
+              <circle class="progress-ring-bg" stroke="var(--border-soft)" stroke-width="14" fill="transparent" r="90" cx="110" cy="110" />
+              <circle class="progress-ring-fill" stroke="var(--accent)" stroke-width="14" fill="transparent" r="90" cx="110" cy="110" />
+            </svg>
+            <div class="progress-ring-text">
+              <div class="progress-ring-pct">${data.progress_percentage.toFixed(0)}%</div>
+              <div class="progress-ring-label">Daily Target Reached</div>
+            </div>
+          </div>
+          
+          <div class="kpi-row mt-2">
+            <div class="kpi-item">
+              <div class="kpi-label">Target Daily Volume</div>
+              <div class="kpi-val">${data.target_daily_sales_volume.toLocaleString()} L</div>
+            </div>
+            <div class="kpi-item">
+              <div class="kpi-label">Volume Sold Today</div>
+              <div class="kpi-val">${data.current_daily_volume.toLocaleString()} L</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Volume Gap Alert Card -->
+        <div class="warn-alert-card">
+          <div class="alert-icon">⚠️</div>
+          <div class="alert-content">
+            <h4>Profitability Target Alert</h4>
+            <p>${data.micro_label}</p>
+          </div>
+        </div>
+
+        <!-- Monthly profits bar chart -->
+        <div class="bar-chart-card">
+          <div class="card-head">
+            <h3>Monthly Historical Profit Accumulations</h3>
+            <span class="hint" style="margin-left: auto;">Last 400 Days</span>
+          </div>
+          <div class="chart-wrapper">
+            ${barChartHtml}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+window.addEventListener("DOMContentLoaded", loadAnalyticsData);
+</script>
+</body>
+</html>

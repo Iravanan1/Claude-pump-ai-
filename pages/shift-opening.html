@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shift Opening · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+function render() {
+  const s = PumpStore.state;
+  const draft = PumpStore.loadDraft('shift-opening') || {};
+  // suggest opening = previous shift's closing for each nozzle
+  const lastShift = s.shifts[s.shifts.length - 1];
+  const suggested = {};
+  if (lastShift) (lastShift.readings || []).forEach(r => suggested[r.nozzleId] = r.closing);
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Operations',
+      title: 'Open new shift',
+      desc: 'Capture opening totaliser readings. Each value should match the previous shift\u2019s closing on the same nozzle.',
+      actions: `<a class="btn" href="../index.html">Cancel</a>`
+    })}
+
+    ${s.activeShift ? `
+      <div class="alert warn">
+        <span class="icon">⚠</span>
+        <div>
+          <strong>A shift is already open</strong> — opened by ${s.activeShift.operatorName} at ${fmt.date(s.activeShift.openedAt)}.
+          Close it before starting a new one. <a href="reconciliation.html">Go to reconciliation →</a>
+        </div>
+      </div>
+    ` : ''}
+
+    <form id="open-form" ${s.activeShift ? 'style="opacity:0.4; pointer-events:none;"' : ''}>
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-title"><h3>Shift details</h3></div>
+          <div class="input-row">
+            <div class="field">
+              <label>Operator</label>
+              <select class="select" name="operator">
+                ${s.operators.map(o => `<option value="${o.id}" ${draft.operator === o.id ? 'selected' : ''}>${o.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field">
+              <label>Shift name</label>
+              <select class="select" name="shiftName">
+                <option ${draft.shiftName === 'Morning' ? 'selected' : ''}>Morning (06:00–14:00)</option>
+                <option ${draft.shiftName === 'Evening' ? 'selected' : ''}>Evening (14:00–22:00)</option>
+                <option ${draft.shiftName === 'Night' ? 'selected' : ''}>Night (22:00–06:00)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Notes (optional)</label>
+            <textarea class="textarea" name="notes" placeholder="Weather, special instructions, tanker due, etc.">${draft.notes || ''}</textarea>
+          </div>
+          <small class="muted">Opening at ${fmt.date(new Date().toISOString())}</small>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><h3>Cash float</h3></div>
+          <div class="field">
+            <label>Opening cash in drawer (₹)</label>
+            <input class="input mono" type="number" name="cashFloat" step="1" value="${draft.cashFloat || 2000}">
+            <div class="hint">Standard ₹2,000 change kit. Adjust if different.</div>
+          </div>
+          <h4 class="mt-2" style="margin-top:18px;">Fuel prices today</h4>
+          <div class="table-wrap mt-1">
+            <table class="t">
+              <thead><tr><th>Fuel</th><th class="num">₹ / L</th></tr></thead>
+              <tbody>
+                ${[...new Set(s.nozzles.map(n => n.fuel))].map(f => {
+                  const price = s.nozzles.find(n => n.fuel === f)?.price || 0;
+                  return `<tr><td>${f}</td><td class="num">${fmt.num(price, 2)}</td></tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-title">
+          <h3>Opening totaliser readings</h3>
+          <small class="muted">All values in litres</small>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr>
+              <th>Nozzle</th><th>Fuel</th>
+              <th class="num">Last close</th>
+              <th class="num">Opening reading</th>
+              <th>Match</th>
+            </tr></thead>
+            <tbody>
+              ${s.nozzles.map(n => `
+                <tr>
+                  <td><strong>${n.name}</strong></td>
+                  <td>${n.fuel}</td>
+                  <td class="num muted">${suggested[n.id] != null ? fmt.num(suggested[n.id], 2) : '—'}</td>
+                  <td class="num">
+                    <input class="input mono" type="number" step="0.01" name="open_${n.id}"
+                           value="${draft['open_' + n.id] || suggested[n.id] || n.opening}"
+                           data-suggested="${suggested[n.id] ?? ''}"
+                           style="text-align:right; width: 140px;">
+                  </td>
+                  <td><span class="match-pill" data-for="${n.id}"></span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="alert info mt-2" style="margin-top:14px;">
+          <span class="icon">ℹ</span>
+          <div>If today's opening doesn't match yesterday's closing, the discrepancy is flagged but you can still proceed — note the reason in the comments.</div>
+        </div>
+      </div>
+
+      <div class="row mt-3" style="margin-top: 18px; gap: 10px;">
+        <button class="btn btn-primary" type="submit">Open shift</button>
+        <button class="btn" type="button" id="save-draft">Save draft</button>
+        <button class="btn btn-ghost" type="button" id="clear-draft">Clear</button>
+        <span class="muted" style="margin-left: auto;" id="autosave-note">Drafts autosave every 5s</span>
+      </div>
+    </form>
+  `;
+
+  wire();
+}
+
+function wire() {
+  const f = document.getElementById('open-form');
+  if (!f) return;
+
+  // live match indicator
+  const updateMatch = () => {
+    f.querySelectorAll('input[name^="open_"]').forEach(inp => {
+      const sug = parseFloat(inp.dataset.suggested);
+      const val = parseFloat(inp.value);
+      const id  = inp.name.replace('open_', '');
+      const pill = f.querySelector(`.match-pill[data-for="${id}"]`);
+      if (!pill) return;
+      if (isNaN(sug)) { pill.innerHTML = '<span class="badge">first</span>'; return; }
+      const diff = Math.abs(val - sug);
+      if (diff < 0.005) pill.innerHTML = '<span class="badge ok"><span class="dot"></span>matches</span>';
+      else if (diff < 1) pill.innerHTML = `<span class="badge warn"><span class="dot"></span>off ${diff.toFixed(2)}</span>`;
+      else pill.innerHTML = `<span class="badge bad"><span class="dot"></span>off ${diff.toFixed(2)}</span>`;
+    });
+  };
+  f.addEventListener('input', updateMatch);
+  updateMatch();
+
+  // autosave every 5s
+  const save = () => {
+    const fd = new FormData(f);
+    const data = {};
+    fd.forEach((v, k) => data[k] = v);
+    PumpStore.saveDraft('shift-opening', data);
+    document.getElementById('autosave-note').textContent = 'Draft saved ' + new Date().toLocaleTimeString();
+  };
+  setInterval(save, 5000);
+  document.getElementById('save-draft').onclick = () => { save(); UI.toast('Draft saved'); };
+  document.getElementById('clear-draft').onclick = () => { PumpStore.clearDraft('shift-opening'); UI.toast('Draft cleared'); render(); };
+
+  // submit
+  f.addEventListener('submit', e => {
+    e.preventDefault();
+    const fd = new FormData(f);
+    const data = {};
+    fd.forEach((v, k) => data[k] = v);
+
+    const s = PumpStore.state;
+    const operator = s.operators.find(o => o.id === data.operator) || s.operators[0];
+    const readings = s.nozzles.map(n => ({
+      nozzleId: n.id,
+      opening: Number(data['open_' + n.id] || 0),
+      closing: null,
+      testing: 0,
+      price: n.price
+    }));
+
+    const shift = {
+      id: 'sh_' + Date.now().toString(36),
+      operatorId: operator.id,
+      operatorName: operator.name,
+      shiftName: data.shiftName,
+      notes: data.notes,
+      cashFloat: Number(data.cashFloat || 0),
+      openedAt: PumpStore.nowISO(),
+      readings,
+      tenders: { cash: 0, upi: 0, card: 0, credit: 0, fleet: 0 },
+      expenses: []
+    };
+
+    PumpStore.update('shift.open', s => { s.activeShift = shift; }, { shiftId: shift.id, operator: operator.name });
+    PumpStore.clearDraft('shift-opening');
+    UI.toast('Shift opened — head to Active Shift', 'ok');
+    setTimeout(() => location.href = 'active-shift.html', 500);
+  });
+}
+
+render();
+</script>
+</body>
+</html>

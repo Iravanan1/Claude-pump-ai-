@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0e12">
+<title>PumpAI · Mobile Sync Capture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & CSS Custom Properties ─────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:         #0a0b0e;
+    --bg-card:    #12141a;
+    --bg-elev:    #181c24;
+    --border:     rgba(255, 255, 255, 0.07);
+    --accent:     #6366f1;
+    --accent-glow:rgba(99, 102, 241, 0.35);
+    --success:    #10b981;
+    --success-glow:rgba(16, 185, 129, 0.3);
+    --warn:       #f59e0b;
+    --danger:     #ef4444;
+    --txt:        #f3f4f6;
+    --txt-dim:    #9ca3af;
+    --r-xl:       24px;
+    --r-lg:       16px;
+    --r-sm:       8px;
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    background: var(--bg);
+    color: var(--txt);
+    font-family: 'Outfit', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+    overflow: hidden;
+  }
+
+  /* ── Layout Shell ───────────────────────────────────────────── */
+  .shell {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top, 16px) 20px
+             env(safe-area-inset-bottom, 24px) 20px;
+    gap: 0;
+  }
+
+  /* ── Header View ────────────────────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 4px 12px;
+    flex-shrink: 0;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: conic-gradient(from 180deg, var(--accent), #a855f7, var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    box-shadow: 0 0 15px var(--accent-glow);
+  }
+  .logo-text {
+    font-size: 20px; font-weight: 800; letter-spacing: -0.5px;
+  }
+  .mode-badge {
+    font-size: 11px; font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    color: #818cf8;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  /* ── Live Camera Viewport ───────────────────────────────────── */
+  .preview-wrapper {
+    flex: 1;
+    position: relative;
+    border-radius: var(--r-xl);
+    overflow: hidden;
+    border: 1.5px solid var(--border);
+    background: #000;
+    min-height: 0;
+    margin: 10px 0;
+    box-shadow: inset 0 0 40px rgba(0,0,0,0.6);
+  }
+  #cameraPreview {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .preview-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: none;
+  }
+  /* Interactive Corner Guides */
+  .crop-guide {
+    position: absolute;
+    width: 82%; height: 72%;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+  }
+  .crop-guide::before, .crop-guide::after,
+  .crop-guide span::before, .crop-guide span::after {
+    content: '';
+    position: absolute;
+    width: 26px; height: 26px;
+    border-color: rgba(255, 255, 255, 0.75);
+    border-style: solid;
+  }
+  .crop-guide::before  { top: 0; left: 0;  border-width: 3px 0 0 3px; border-radius: 6px 0 0 0; }
+  .crop-guide::after   { top: 0; right: 0; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0; }
+  .crop-guide span::before { bottom: 0; left: 0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 6px; }
+  .crop-guide span::after  { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0; }
+
+  /* Camera Placeholder */
+  .preview-placeholder {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px;
+    background: var(--bg-card);
+  }
+  .preview-placeholder .ph-icon { font-size: 56px; opacity: 0.5; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5)); }
+  .preview-placeholder .ph-text {
+    font-size: 14px; color: var(--txt-dim); text-align: center;
+    max-width: 220px; line-height: 1.6;
+  }
+
+  /* Result Canvas */
+  #resultCanvas {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: none;
+    background: #050608;
+  }
+
+  /* Camera Flash Animation */
+  .flash {
+    position: absolute; inset: 0;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.08s;
+  }
+  .flash.active { opacity: 0.9; transition: none; }
+
+  /* ── Status Bar ─────────────────────────────────────────────── */
+  .status-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--r-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    margin-bottom: 12px;
+    min-height: 52px;
+  }
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--txt-dim);
+  }
+  .status-dot.ready   { background: var(--success); box-shadow: 0 0 10px var(--success-glow); }
+  .status-dot.busy    { background: var(--warn); animation: pulse 1s infinite; }
+  .status-dot.error   { background: var(--danger); }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .status-text { font-size: 14px; color: var(--txt-dim); flex: 1; line-height: 1.4; }
+  .status-text strong { color: var(--txt); font-weight: 600; }
+
+  /* ── Action Rows ────────────────────────────────────────────── */
+  .action-row {
+    display: flex;
+    gap: 14px;
+    flex-shrink: 0;
+    padding-bottom: 6px;
+  }
+
+  /* ── Custom Buttons ──────────────────────────────────────────── */
+  .btn {
+    border: none; outline: none; cursor: pointer;
+    border-radius: var(--r-lg);
+    font-family: inherit;
+    font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: transform 0.1s, box-shadow 0.1s, opacity 0.15s;
+    white-space: nowrap;
+  }
+  .btn:active { transform: scale(0.96); }
+
+  /* Camera shutter capture button */
+  #btnCapture {
+    flex: 1;
+    height: 72px;
+    font-size: 18px;
+    letter-spacing: -0.3px;
+    background: linear-gradient(135deg, var(--accent) 0%, #4f46e5 100%);
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    border-radius: 20px;
+  }
+  #btnCapture:disabled {
+    opacity: 0.4; pointer-events: none;
+    box-shadow: none;
+  }
+
+  /* Gallery picker fallback button */
+  #btnGallery {
+    width: 72px; height: 72px;
+    background: var(--bg-elev);
+    color: var(--txt);
+    border: 1.5px solid var(--border);
+    font-size: 24px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+
+  /* Retake/Recapture button */
+  #btnRetake {
+    width: 72px; height: 72px;
+    background: var(--bg-elev);
+    color: var(--txt);
+    border: 1.5px solid var(--border);
+    font-size: 24px;
+    border-radius: 20px;
+    flex-shrink: 0;
+    display: none;
+  }
+
+  /* Sync/Upload button */
+  #btnUpload {
+    flex: 1;
+    height: 72px;
+    font-size: 18px;
+    letter-spacing: -0.3px;
+    background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+    border-radius: 20px;
+    display: none;
+  }
+  #btnUpload:disabled {
+    opacity: 0.4; pointer-events: none;
+    box-shadow: none;
+  }
+
+  /* ── Result Card ─────────────────────────────────────────────── */
+  .result-card {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-bottom: 8px;
+  }
+  .result-card.show { display: flex; }
+  .result-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .result-label { color: var(--txt-dim); font-weight: 500; }
+  .result-value {
+    font-weight: 600; font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; color: var(--txt);
+  }
+  .result-value.ok  { color: var(--success); }
+
+  /* ── Hidden elements ────────────────────────────────────────── */
+  #hiddenFileInput { display: none; }
+  #hiddenCanvas    { display: none; }
+
+  /* ── Spinner Overlay ─────────────────────────────────────────── */
+  .spinner-overlay {
+    display: none;
+    position: absolute; inset: 0;
+    background: rgba(10, 11, 14, 0.8);
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+    border-radius: var(--r-xl);
+    backdrop-filter: blur(6px);
+  }
+  .spinner-overlay.show { display: flex; }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 4px solid rgba(255,255,255,0.08);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner-label { font-size: 15px; font-weight: 700; color: var(--txt); }
+  .spinner-sub   { font-size: 12px; color: var(--txt-dim); }
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">
+      <div class="logo-dot">📡</div>
+      <span class="logo-text">PumpAI Sync</span>
+    </div>
+    <span class="mode-badge">Mobile Link</span>
+  </header>
+
+  <!-- Live camera capture canvas and guides -->
+  <div class="preview-wrapper" id="previewWrapper">
+    <!-- Camera Permissions Placeholder -->
+    <div class="preview-placeholder" id="previewPlaceholder">
+      <div class="ph-icon">📷</div>
+      <div class="ph-text">Align your register logbook sheet and take a snapshot to sync with laptop server</div>
+    </div>
+
+    <!-- Live Stream -->
+    <video id="cameraPreview" autoplay playsinline muted></video>
+
+    <!-- Frozen Capture Canvas -->
+    <canvas id="resultCanvas"></canvas>
+
+    <!-- Corner Alignment crop guides -->
+    <div class="preview-overlay">
+      <div class="crop-guide" id="cropGuide" style="display:none;"><span></span></div>
+    </div>
+
+    <!-- Processing Loader Spinner -->
+    <div class="spinner-overlay" id="spinnerOverlay">
+      <div class="spinner"></div>
+      <div class="spinner-label">Transmitting...</div>
+      <div class="spinner-sub">Saving directly into server backlog queue</div>
+    </div>
+
+    <!-- Shutter Flash -->
+    <div class="flash" id="flash"></div>
+  </div>
+
+  <!-- Status Bar feedback -->
+  <div class="status-bar" id="statusBar">
+    <div class="status-dot" id="statusDot"></div>
+    <div class="status-text" id="statusText">Awaiting camera interface initialization...</div>
+  </div>
+
+  <!-- Transmission Confirmation Results Card -->
+  <div class="result-card" id="resultCard">
+    <div class="result-row">
+      <span class="result-label">Connection Status</span>
+      <span class="result-value ok" id="rStatus">—</span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Saved Filename</span>
+      <span class="result-value" id="rFilename">—</span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">SHA-256 Hash</span>
+      <span class="result-value" id="rHash" style="font-size:11px;">—</span>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="action-row" id="actionRow">
+    <button class="btn" id="btnGallery" title="Pick image from files">🖼️</button>
+    <button class="btn" id="btnCapture" disabled>📷 &nbsp;Capture Register</button>
+  </div>
+
+  <!-- Post-capture Confirmation actions -->
+  <div class="action-row" id="actionRowPost" style="display:none;">
+    <button class="btn" id="btnRetake" style="display:flex;">🔄</button>
+    <button class="btn" id="btnUpload" style="display:flex;">📡 &nbsp;Transmit to Laptop Server</button>
+  </div>
+
+</div>
+
+<!-- Fallbacks -->
+<input type="file" id="hiddenFileInput" accept="image/*" capture="environment">
+<canvas id="hiddenCanvas"></canvas>
+
+<script>
+// Resolve the backend hostname automatically (handles scans from local office network IP)
+const BACKEND_HOST = `${window.location.protocol}//${window.location.hostname}:8000`;
+const API_UPLOAD   = `${BACKEND_HOST}/api/sync/lan-upload`;
+
+const video          = document.getElementById('cameraPreview');
+const resultCanvas   = document.getElementById('resultCanvas');
+const hiddenCanvas   = document.getElementById('hiddenCanvas');
+const hiddenFileInput= document.getElementById('hiddenFileInput');
+const placeholder    = document.getElementById('previewPlaceholder');
+const cropGuide      = document.getElementById('cropGuide');
+const statusDot      = document.getElementById('statusDot');
+const statusText     = document.getElementById('statusText');
+const resultCard     = document.getElementById('resultCard');
+const actionRow      = document.getElementById('actionRow');
+const actionRowPost  = document.getElementById('actionRowPost');
+const btnCapture     = document.getElementById('btnCapture');
+const btnGallery     = document.getElementById('btnGallery');
+const btnUpload      = document.getElementById('btnUpload');
+const btnRetake      = document.getElementById('btnRetake');
+const flash          = document.getElementById('flash');
+const spinnerOverlay = document.getElementById('spinnerOverlay');
+
+let stream = null;
+let capturedBlob = null;
+let cameraStarted = false;
+
+function setStatus(msg, dotClass = '') {
+  statusDot.className = 'status-dot ' + dotClass;
+  statusText.innerHTML = msg;
+}
+
+// Rear camera media stream requester
+async function startCamera() {
+  if (cameraStarted) return;
+  setStatus('Requesting camera authorization...', 'busy');
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' }, // target rear camera
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    cameraStarted = true;
+    placeholder.style.display = 'none';
+    video.style.display = 'block';
+    cropGuide.style.display = 'block';
+    btnCapture.disabled = false;
+    setStatus('<strong>Camera active.</strong> Align register page and take snapshot.', 'ready');
+  } catch (err) {
+    setStatus(`Camera access failed: <strong>${err.message}</strong>. Use gallery fallback 🖼️.`, 'error');
+    console.error('Camera initialization error:', err);
+  }
+}
+
+// Capture frame still image
+function captureFrame() {
+  if (!stream) return;
+
+  // Flash
+  flash.classList.add('active');
+  requestAnimationFrame(() => {
+    flash.classList.remove('active');
+  });
+
+  // Render to hidden canvas
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  hiddenCanvas.width  = w;
+  hiddenCanvas.height = h;
+  const ctx = hiddenCanvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, w, h);
+
+  hiddenCanvas.toBlob(blob => {
+    capturedBlob = blob;
+
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      resultCanvas.width  = img.width;
+      resultCanvas.height = img.height;
+      resultCanvas.getContext('2d').drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+
+    // Halt live feed
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    cameraStarted = false;
+    video.style.display = 'none';
+    resultCanvas.style.display = 'block';
+    cropGuide.style.display = 'none';
+
+    // Toggle confirmation buttons
+    actionRow.style.display     = 'none';
+    actionRowPost.style.display = 'flex';
+    resultCard.classList.remove('show');
+    setStatus('Logbook snapshot ready. Transmit to laptop server or retake.', 'ready');
+  }, 'image/jpeg', 0.92);
+}
+
+// Ingest media stream to laptop API
+async function transmitCapture() {
+  if (!capturedBlob) return;
+
+  spinnerOverlay.classList.add('show');
+  btnUpload.disabled = true;
+  setStatus('Transmitting sync packets to laptop...', 'busy');
+
+  const formData = new FormData();
+  formData.append('image', capturedBlob, `sync_capture_${Date.now()}.jpg`);
+
+  try {
+    const resp = await fetch(API_UPLOAD, { method: 'POST', body: formData });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    spinnerOverlay.classList.remove('show');
+    populateSyncResult(data);
+    setStatus('✅ <strong>Transmission successful!</strong> Backlog queue updated on laptop.', 'ready');
+  } catch (err) {
+    spinnerOverlay.classList.remove('show');
+    setStatus(`❌ Transmission failed: <strong>${err.message}</strong>`, 'error');
+    btnUpload.disabled = false;
+    console.error('Upload transmission error:', err);
+  }
+}
+
+function populateSyncResult(data) {
+  resultCard.classList.add('show');
+  document.getElementById('rStatus').textContent = 'SYNCED ✓';
+  document.getElementById('rStatus').className = 'result-value ok';
+  document.getElementById('rFilename').textContent = data.filename || '—';
+  document.getElementById('rHash').textContent = data.hash ? data.hash.substring(0, 32) + '...' : '—';
+}
+
+function retake() {
+  capturedBlob = null;
+  resultCanvas.style.display = 'none';
+  resultCard.classList.remove('show');
+  actionRowPost.style.display = 'none';
+  actionRow.style.display     = 'flex';
+  btnCapture.disabled         = true;
+  btnUpload.disabled          = false;
+  setStatus('Awaiting snapshot trigger...', '');
+  startCamera();
+}
+
+function pickFromGallery() {
+  hiddenFileInput.click();
+}
+
+hiddenFileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  capturedBlob = file;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    resultCanvas.width  = img.naturalWidth;
+    resultCanvas.height = img.naturalHeight;
+    resultCanvas.getContext('2d').drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  video.style.display        = 'none';
+  resultCanvas.style.display = 'block';
+  placeholder.style.display  = 'none';
+  cropGuide.style.display    = 'none';
+
+  actionRow.style.display     = 'none';
+  actionRowPost.style.display = 'flex';
+  setStatus('Asset selected. Transmit to laptop server or clear/retake.', 'ready');
+  hiddenFileInput.value = '';
+});
+
+btnCapture.addEventListener('click', captureFrame);
+btnGallery.addEventListener('click', pickFromGallery);
+btnUpload.addEventListener('click',  transmitCapture);
+btnRetake.addEventListener('click',  retake);
+
+// Autoplay
+window.addEventListener('load', () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus('Camera input unsupported. Please select a photo using the Gallery fallback 🖼️.', 'error');
+    return;
+  }
+  startCamera();
+});
+
+// Enforce screen wake locks while active
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try { await navigator.wakeLock.request('screen'); } catch(_) {}
+  }
+}
+requestWakeLock();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+</script>
+</body>
+</html>

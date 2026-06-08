@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnostics · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+  /* Base styles */
+  .log-viewer-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 80px);
+    gap: 16px;
+    margin-top: 10px;
+  }
+
+  /* Console Panel Styles */
+  .console-panel {
+    background: #09090e;
+    border: 1px solid #1c1c24;
+    border-radius: var(--r-lg);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 2px 8px rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Terminal Header Bar */
+  .console-header {
+    background: #12121a;
+    border-bottom: 1px solid #1c1c24;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .console-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    background: #2ecc71;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #2ecc71;
+    animation: pulse 1.8s infinite;
+  }
+  .console-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: #e2e2e9;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  /* Console Lines Area */
+  .console-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    margin: 0;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    background: #09090e;
+  }
+
+  /* Log Row Layout */
+  .log-line {
+    display: flex;
+    align-items: flex-start;
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: background 100ms ease;
+  }
+  .log-line:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .line-num {
+    color: #4a4a5a;
+    width: 32px;
+    user-select: none;
+    text-align: right;
+    margin-right: 16px;
+  }
+  .line-text {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* Severity Colorings */
+  .log-info {
+    color: #a0a0b0; /* Soft gray */
+  }
+  .log-warn {
+    color: #f39c12; /* Amber/Orange */
+  }
+  .log-error, .log-critical {
+    color: #ff4d4d; /* Bright red */
+    font-weight: 500;
+  }
+
+  /* Open Error Image Icon Button */
+  .btn-open-error-image {
+    background: rgba(255, 77, 77, 0.1);
+    color: #ff4d4d;
+    border: 1px solid rgba(255, 77, 77, 0.25);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    margin-left: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 120ms ease;
+    vertical-align: middle;
+  }
+  .btn-open-error-image:hover {
+    background: rgba(255, 77, 77, 0.2);
+    border-color: #ff4d4d;
+    box-shadow: 0 0 8px rgba(255, 77, 77, 0.2);
+  }
+
+  /* Modal Overlay Styling */
+  .image-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(10, 10, 15, 0.95);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+  .image-modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .image-modal-content {
+    background: #14141c;
+    border: 1px solid #272736;
+    border-radius: var(--r-lg);
+    width: 90vw;
+    max-width: 800px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 10px 50px rgba(0, 0, 0, 0.6);
+  }
+  .modal-header {
+    background: #1c1c28;
+    padding: 16px 20px;
+    border-bottom: 1px solid #272736;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #e2e2e9;
+  }
+  .modal-close {
+    background: transparent;
+    color: var(--ink-muted);
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+  }
+  .modal-close:hover {
+    background: rgba(255,255,255,0.08);
+    color: var(--ink);
+  }
+  .modal-body {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #09090e;
+  }
+  .modal-image {
+    max-width: 100%;
+    max-height: 60vh;
+    border-radius: var(--r-sm);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    border: 1px solid #1c1c24;
+  }
+
+  /* Utility Filter Bar */
+  .filter-bar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .filter-input {
+    background: #14141c;
+    border: 1px solid #272736;
+    border-radius: var(--r-sm);
+    color: #e2e2e9;
+    padding: 8px 12px;
+    font-size: 13px;
+    width: 240px;
+    font-family: var(--font-sans);
+  }
+  .filter-input:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 12px #2ecc71; }
+    100% { transform: scale(1); opacity: 0.8; }
+  }
+
+  .btn-clear {
+    background: rgba(231, 76, 60, 0.15);
+    color: #ff4d4d;
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    padding: 8px 16px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .btn-clear:hover {
+    background: rgba(231, 76, 60, 0.25);
+    border-color: #ff4d4d;
+  }
+</style>
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<!-- Image Modal Overlay -->
+<div class="image-modal-overlay" id="image-modal">
+  <div class="image-modal-content">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-image-title">Error Register Page</div>
+      <button class="modal-close" onclick="closeImageModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <img id="modal-image-target" src="" class="modal-image" alt="Error Sheet Detail">
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+let logsCache = [];
+let textFilter = '';
+
+function render() {
+  const main = document.getElementById('main');
+  
+  main.innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Diagnostics',
+      title: 'Operations Log Viewer',
+      desc: 'Monitor handwritten ledger OCR operations, CV2 shadow division filters, and API token counts in real time.',
+      actions: `
+        <div class="filter-bar">
+          <input type="text" 
+                 class="filter-input" 
+                 placeholder="Search & filter console logs..." 
+                 id="log-search" 
+                 value="${textFilter}"
+                 oninput="handleSearch(this.value)">
+          <button class="btn-clear" onclick="clearDiagnosticHistory()">Clear Diagnostic History</button>
+        </div>
+      `
+    })}
+    
+    <div class="log-viewer-container">
+      <div class="console-panel">
+        <div class="console-header">
+          <div class="console-title-wrap">
+            <span class="status-dot"></span>
+            <span class="console-title">pipeline.log Console Stream</span>
+          </div>
+          <div style="font-size: 11px; color: var(--ink-faint); font-family: var(--font-mono);">
+            Polling active (2s interval)
+          </div>
+        </div>
+        <div class="console-body" id="console-output">
+          <!-- Log rows rendered line-by-line dynamically -->
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // Render Console Output Rows
+  renderConsoleRows();
+}
+
+function renderConsoleRows() {
+  const consoleOutput = document.getElementById('console-output');
+  if (!consoleOutput) return;
+
+  const filteredLogs = logsCache.filter(line => {
+    if (!textFilter) return true;
+    return line.toLowerCase().includes(textFilter.toLowerCase());
+  });
+
+  if (filteredLogs.length === 0) {
+    consoleOutput.innerHTML = `
+      <div style="color: #4a4a5a; text-align: center; padding-top: 40px; font-style: italic;">
+        -- No console log entries matching active filter --
+      </div>
+    `;
+    return;
+  }
+
+  consoleOutput.innerHTML = filteredLogs.map((line, idx) => {
+    const severity = getLineSeverity(line);
+    const escapedLine = escapeHtml(line);
+    const formattedLineText = renderLineWithAction(escapedLine, severity);
+    return `
+      <div class="log-line">
+        <span class="line-num">${idx + 1}</span>
+        <span class="line-text ${severity.class}">${formattedLineText}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function getLineSeverity(line) {
+  const lower = line.toLowerCase();
+  if (lower.includes('critical') || lower.includes('error') || lower.includes('fail')) {
+    return { class: 'log-error', level: 'ERROR' };
+  }
+  if (lower.includes('warning') || lower.includes('warn')) {
+    return { class: 'log-warn', level: 'WARN' };
+  }
+  return { class: 'log-info', level: 'INFO' };
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.innerText = text;
+  return div.innerHTML;
+}
+
+function renderLineWithAction(lineText, severity) {
+  // If this is an error/critical line, check if we can parse out an image filename
+  if (severity.level === 'ERROR' || severity.level === 'WARN') {
+    const imageUrl = extractImageFromLog(lineText);
+    if (imageUrl) {
+      const filename = imageUrl.split('/').pop();
+      return `${lineText} <button class="btn-open-error-image" onclick="openImageModal('${imageUrl}', '${filename}')">👁️ Open Error Image</button>`;
+    }
+  }
+  return lineText;
+}
+
+function extractImageFromLog(line) {
+  // Look for absolute/relative HTTP paths first
+  const httpMatch = line.match(/(https?:\/\/[^\s"'()&lt;&gt;]+)/i);
+  if (httpMatch) {
+    const url = httpMatch[1];
+    if (url.match(/\.(png|jpg|jpeg|pdf|webp)/i)) {
+      return url;
+    }
+  }
+  
+  // Look for file paths like /uploaded_raw_photos/raw_... or /processed_images/raw_...
+  const pathMatch = line.match(/(\/(?:uploaded_raw_photos|processed_images)\/[a-zA-Z0-9_\-\.]+\.(?:png|jpg|jpeg|pdf|webp))/i);
+  if (pathMatch) {
+    return `http://localhost:8000${pathMatch[1]}`;
+  }
+  
+  // Look for raw_... filenames
+  const rawMatch = line.match(/(raw_[a-zA-Z0-9_]+\.(?:png|jpg|jpeg|pdf|webp))/i);
+  if (rawMatch) {
+    return `http://localhost:8000/uploaded_raw_photos/${rawMatch[1]}`;
+  }
+  
+  // Look for general image filenames
+  const fileMatch = line.match(/([a-zA-Z0-9_\-\.]+\.(?:png|jpg|jpeg|pdf|webp))/gi);
+  if (fileMatch) {
+    const filename = fileMatch[fileMatch.length - 1];
+    if (filename.startsWith("raw_")) {
+      return `http://localhost:8000/uploaded_raw_photos/${filename}`;
+    }
+    return `http://localhost:8000/uploaded_raw_photos/${filename}`;
+  }
+  
+  return null;
+}
+
+function handleSearch(val) {
+  textFilter = val;
+  renderConsoleRows();
+}
+
+async function fetchLogs() {
+  try {
+    const res = await fetch('http://localhost:8000/api/logs/stream');
+    if (!res.ok) throw new Error('Failed to stream logs');
+    const data = await res.json();
+    if (data.status === 'success') {
+      logsCache = data.logs || [];
+      renderConsoleRows();
+    }
+  } catch (err) {
+    console.error('Failed to poll diagnostic logs:', err);
+  }
+}
+
+async function clearDiagnosticHistory() {
+  if (!UI.confirmAction('Are you sure you want to permanently clear the diagnostic log history?')) return;
+  try {
+    const res = await fetch('http://localhost:8000/api/logs/clear', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to truncate logs');
+    const data = await res.json();
+    if (data.status === 'success') {
+      UI.toast('Console log history cleared cleanly.', 'ok');
+      logsCache = [];
+      renderConsoleRows();
+    }
+  } catch (err) {
+    UI.toast('Failed to clear diagnostic log file: ' + err.message, 'bad');
+  }
+}
+
+function openImageModal(url, filename) {
+  const modal = document.getElementById('image-modal');
+  const target = document.getElementById('modal-image-target');
+  const title = document.getElementById('modal-image-title');
+  
+  if (modal && target && title) {
+    title.textContent = `Error Register Sheet: ${filename}`;
+    target.src = url;
+    modal.classList.add('active');
+  }
+}
+
+function closeImageModal() {
+  const modal = document.getElementById('image-modal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+}
+
+// Global initialization
+document.addEventListener('DOMContentLoaded', () => {
+  UI.renderShell();
+  render();
+  fetchLogs();
+  
+  // Poll active every 2 seconds
+  setInterval(fetchLogs, 2000);
+});
+</script>
+</body>
+</html>

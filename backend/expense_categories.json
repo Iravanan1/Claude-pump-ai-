@@ -1,0 +1,53 @@
+{
+  "Staff Food & Tea": [
+    "tea", "chai", "chotu", "nashta", "khana", "biscuit", "paani", "water bottle",
+    "snacks", "breakfast", "lunch", "dinner", "tiffin", "chai pani", "chaipani",
+    "food", "canteen", "refreshments", "पानी", "चाय", "नाश्ता", "खाना"
+  ],
+  "Station Maintenance": [
+    "cleaning", "safai", "झाडू", "jhadoo", "color", "paint", "pipe", "hardware",
+    "repair", "welding", "plumber", "electrician", "light", "bulb", "wire",
+    "fitting", "bolt", "screw", "cement", "sand", "tile", "broom", "mop",
+    "phenyl", "acid", "chemical", "detergent", "soap", "bucket", "tap",
+    "maintenance", "upkeep", "रंग", "सफाई", "मरम्मत"
+  ],
+  "Generator Operations": [
+    "generator fuel", "gen set oil", "grease", "generator", "genset", "gen set",
+    "diesel gen", "generator oil", "alternator", "battery", "coolant", "engine oil",
+    "generator maintenance", "gen repair", "हाईस्पीड डीजल", "जेनरेटर"
+  ],
+  "Staff Salaries & Wages": [
+    "salary", "wages", "advance", "worker pay", "staff salary", "operator pay",
+    "guard salary", "watchman", "helper salary", "pump boy", "attendant",
+    "तनख्वाह", "वेतन", "अग्रिम"
+  ],
+  "Office & Stationery": [
+    "stationery", "pen", "paper", "register", "notebook", "receipt book",
+    "stamp", "printing", "photocopy", "xerox", "envelope", "file", "folder",
+    "stapler", "staples", "ink", "toner", "office supply", "rubber stamp",
+    "स्टेशनरी", "कागज़"
+  ],
+  "Vehicle & Fuel Expenses": [
+    "vehicle", "petrol vehicle", "bike fuel", "scooter fuel", "car fuel",
+    "vehicle repair", "tyre", "puncture", "service vehicle", "oil change",
+    "vehicle maintenance", "gaadi", "गाड़ी"
+  ],
+  "Government Taxes & Fees": [
+    "tax", "government fee", "licence fee", "renewal fee", "NOC fee",
+    "inspection fee", "fine", "penalty", "challan", "registration fee",
+    "permit fee", "dues", "टैक्स", "जुर्माना"
+  ],
+  "Banking & Financial Charges": [
+    "bank charge", "atm fee", "cheque", "dd charge", "transfer fee",
+    "pos machine", "swipe machine rent", "pos rental", "bank fees",
+    "transaction fee", "cash deposit fee", "बैंक चार्ज"
+  ],
+  "Security & Guard Services": [
+    "guard", "security", "watchman salary", "security fee", "patrol",
+    "cctv", "camera maintenance", "सुरक्षा", "गार्ड"
+  ],
+  "Miscellaneous Operational": [
+    "misc", "miscellaneous", "other expense", "sundry", "petty cash",
+    "various", "general", "अन्य", "विविध"
+  ]
+}

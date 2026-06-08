@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense Register · PumpAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/accounting.js"></script>
+<script src="../assets/js/ocr.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script>
+const CATEGORIES = ['Salary', 'Tea/Refreshment', 'Repair & Maintenance', 'Cleaning', 'Stationery', 'Transport', 'Electricity', 'Misc'];
+
+function render() {
+  const s = PumpStore.state;
+  // pull in shift-level expenses AND standalone ones (s.expenses)
+  const standalone = (s.expenses || []).map(e => ({ ...e, source: 'standalone' }));
+  const shiftLevel = s.shifts.flatMap(sh => (sh.expenses || []).map(e => ({ ...e, source: 'shift', shiftId: sh.id, operator: sh.operatorName })));
+  const all = [...standalone, ...shiftLevel].sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+
+  const today = new Date().toISOString().slice(0,10);
+  const todayTotal = all.filter(e => (e.at || '').slice(0,10) === today).reduce((s, e) => s + Number(e.amount), 0);
+  const monthTotal = all.filter(e => (e.at || '').slice(0,7) === today.slice(0,7)).reduce((s, e) => s + Number(e.amount), 0);
+
+  // category breakdown
+  const byCat = {};
+  all.forEach(e => byCat[e.category] = (byCat[e.category] || 0) + Number(e.amount));
+
+  document.getElementById('main').innerHTML = `
+    ${UI.pageHead({
+      crumb: 'Records',
+      title: 'Expense Register',
+      desc: 'All petty cash and operational expenses, whether logged during a shift or directly.'
+    })}
+
+    <div class="grid grid-3">
+      <div class="kpi"><div class="kpi-label">Today</div><div class="kpi-value">${fmt.rs(todayTotal)}</div></div>
+      <div class="kpi"><div class="kpi-label">This month</div><div class="kpi-value">${fmt.rs(monthTotal)}</div></div>
+      <div class="kpi"><div class="kpi-label">Entries</div><div class="kpi-value">${all.length}</div></div>
+    </div>
+
+    <div class="grid grid-2 mt-3">
+      <div class="card">
+        <div class="card-title"><h3>Log expense</h3></div>
+        <form id="ex-form">
+          <div class="input-row">
+            <div class="field">
+              <label>Date</label>
+              <input class="input" type="date" name="date" required value="${today}">
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select class="select" name="category">
+                ${CATEGORIES.map(c => `<option>${c}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Amount (₹)</label>
+            <input class="input mono" type="number" step="0.01" name="amount" required>
+          </div>
+          <div class="field">
+            <label>Description</label>
+            <input class="input" name="note" placeholder="e.g., Brushes for forecourt cleaning">
+          </div>
+          <div class="field">
+            <label>Voucher / bill no. (optional)</label>
+            <input class="input mono" name="voucher">
+          </div>
+          <button class="btn btn-primary" type="submit">Log expense</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><h3>Category breakdown</h3></div>
+        ${Object.keys(byCat).length === 0 ? UI.emptyState({ icon: '◎', title: 'No expenses yet' }) : `
+          <div class="stack">
+            ${Object.entries(byCat).sort((a,b) => b[1] - a[1]).map(([cat, amt]) => {
+              const max = Math.max(...Object.values(byCat));
+              const pct = (amt / max) * 100;
+              return `
+                <div>
+                  <div class="row-between" style="margin-bottom:4px;"><small>${cat}</small><span class="num" style="font-size:13px;">${fmt.rs(amt)}</span></div>
+                  <div style="height:6px; background: var(--bg-sunken); border-radius:3px; overflow:hidden;">
+                    <div style="height:100%; width:${pct}%; background: var(--accent-soft);"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-title"><h3>All expenses</h3></div>
+      ${all.length === 0 ? UI.emptyState({ icon: '◎', title: 'No expenses logged' }) : `
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Source</th><th>Voucher</th><th class="num">Amount</th><th></th></tr></thead>
+            <tbody>
+              ${all.map(e => `
+                <tr>
+                  <td>${(e.at || e.date || '').slice(0,10)}</td>
+                  <td>${e.category}</td>
+                  <td class="muted">${e.note || '—'}</td>
+                  <td>${e.source === 'shift' ? `<span class="badge info">Shift · ${e.operator}</span>` : `<span class="badge">Direct</span>`}</td>
+                  <td class="mono">${e.voucher || '—'}</td>
+                  <td class="num">${fmt.rs(e.amount)}</td>
+                  <td class="right">${e.source === 'standalone' ? `<button class="btn btn-sm btn-ghost" data-rm="${e.id}">✕</button>` : ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+
+  document.getElementById('ex-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const entry = {
+      id: 'ex_' + Date.now().toString(36),
+      date: fd.get('date'),
+      category: fd.get('category'),
+      amount: Number(fd.get('amount')),
+      note: fd.get('note'),
+      voucher: fd.get('voucher'),
+      at: PumpStore.nowISO()
+    };
+    PumpStore.update('expense.add', s => { s.expenses.push(entry); }, entry);
+    UI.toast('Expense logged', 'ok');
+    render();
+  });
+
+  document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
+    if (!UI.confirmAction('Remove expense?')) return;
+    PumpStore.update('expense.remove', s => { s.expenses = s.expenses.filter(x => x.id !== b.dataset.rm); }, { id: b.dataset.rm });
+    render();
+  });
+}
+
+render();
+</script>
+</body>
+</html>
